@@ -1,27 +1,13 @@
-// backend/main.go
 package main
 
 import (
-	"fmt"
-	"log"
-	"net/http"
-	"os"
+    "net/http"
+    "log"
+    "my-backend/api" 
 )
 
 func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	http.HandleFunc("/api/hello", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"message": "Halo dari Backend Go!"}`)
-	})
-
-	log.Printf("Server berjalan di port %s...", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatal(err)
-	}
+    http.HandleFunc("/api/hello", handler.Handler)
+    log.Println("Server lokal berjalan di port 8080...")
+    http.ListenAndServe(":8080", nil)
 }
