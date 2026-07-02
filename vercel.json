@@ -6,20 +6,18 @@
     },
     "backend": {
       "root": "backend",
-      "entrypoint": "api/hello.go"
+      "entrypoint": "api/hello.go",
+      "framework": "go"
     }
   },
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "/:path*"
+      "destination": { "service": "backend" }
     },
     {
       "source": "/(.*)",
-      "destination": {
-        "type": "service",
-        "service": "frontend"
-      }
+      "destination": { "service": "frontend" }
     }
   ]
 }
