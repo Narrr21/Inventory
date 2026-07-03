@@ -1,25 +1,17 @@
-import { useState } from "react";
-import MainLayout from "./layouts/MainLayout";
-import { Typography, Paper, Button } from "@mui/material";
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Dashboard from './Dashboard/Dashboard';
 
 function App() {
-  const [count, setCount] = useState(0);
-
   return (
-    <MainLayout>
-      <Paper elevation={2} sx={{ p: 4, textAlign: "center" }}>
-        <Typography variant="body1" color="textPrimary" gutterBottom>
-          This content scales down beautifully on mobile and is centered with
-          clean side margins on desktop.
-        </Typography>
-        <Button
-          variant="contained"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </Button>
-      </Paper>
-    </MainLayout>
+    <Router>
+      <Routes>
+        {/* LANDING PAGE */}
+        <Route path="/" element={<div>Ini halaman home nantinya</div>}></Route>
+
+        {/* DASHBOARD PAGE */}
+        <Route path='/dashboard' element={<Dashboard />}></Route>
+      </Routes>
+    </Router>
   );
 }
 
