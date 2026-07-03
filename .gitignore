@@ -2,3 +2,5 @@ node_modules/
 frontend/dist/
 backend/main
 .env
+.vercel
+.env*
