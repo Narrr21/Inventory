@@ -58,7 +58,7 @@ go run main.go
 
 #### 1b. Run Backend Items API (Go)
 
-This is a separate entrypoint that serves the full `/api/v1/items` contract (see `API_CONTRACT.md`) backed by a real MongoDB instance — set `MONGODB_URI` / `MONGODB_DB` in `backend/.env` (or export them) before running, and make sure a MongoDB instance is reachable (e.g. `docker-compose up mongo` or a local `mongod`).
+This is a separate entrypoint that serves the full `/api/v1/items` contract (see `API_CONTRACT.md`) backed by a real MongoDB instance. It automatically loads `backend/.env` on startup (via [godotenv](https://github.com/joho/godotenv)) — make sure you've copied `backend/.env.example` to `backend/.env` (see step 3 above) with `MONGODB_URI` / `MONGODB_DB` set, and that a MongoDB instance is reachable (e.g. `docker-compose up mongo` or a local `mongod`). Already-exported environment variables still take precedence over `.env`.
 
 ```bash
 cd backend
