@@ -56,16 +56,16 @@ go run main.go
 - The backend API will be live at: http://localhost:8080
 - Test endpoint: http://localhost:8080/api/hello
 
-#### 1b. Run Backend Phase 1 API Stub (Go)
+#### 1b. Run Backend Items API (Go)
 
-This is a separate, mock-only entrypoint that stubs the full `/api/v1/items` contract (see `API_CONTRACT.md`) with static data — no MongoDB required.
+This is a separate entrypoint that serves the full `/api/v1/items` contract (see `API_CONTRACT.md`) backed by a real MongoDB instance — set `MONGODB_URI` / `MONGODB_DB` in `backend/.env` (or export them) before running, and make sure a MongoDB instance is reachable (e.g. `docker-compose up mongo` or a local `mongod`).
 
 ```bash
 cd backend
 go run ./cmd/server
 ```
 
-- The stub API will be live at: http://localhost:8080 (override with `PORT=<port> go run ./cmd/server`)
+- The API will be live at: http://localhost:8080 (override with `PORT=<port> go run ./cmd/server`)
 - Test endpoint: http://localhost:8080/api/v1/items
 
 Every route in `API_CONTRACT.md` can be hit with curl, e.g.:

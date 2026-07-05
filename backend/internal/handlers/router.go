@@ -1,19 +1,23 @@
 package handlers
 
-import "net/http"
+import (
+	"github.com/go-chi/chi/v5"
+)
 
-func NewRouter() *http.ServeMux {
-	mux := http.NewServeMux()
+func NewRouter(items *ItemHandler) chi.Router {
+	r := chi.NewRouter()
 
-	mux.HandleFunc("POST /api/v1/items", CreateItem)
-	mux.HandleFunc("GET /api/v1/items", ListItems)
-	mux.HandleFunc("GET /api/v1/items/filter-options", FilterOptions)
-	mux.HandleFunc("GET /api/v1/items/stats", Stats)
-	mux.HandleFunc("POST /api/v1/items/import", ImportItems)
-	mux.HandleFunc("GET /api/v1/items/export", ExportItems)
-	mux.HandleFunc("GET /api/v1/items/{id}", GetItem)
-	mux.HandleFunc("PATCH /api/v1/items/{id}", UpdateItem)
-	mux.HandleFunc("DELETE /api/v1/items/{id}", DeleteItem)
+	r.Route("/api/v1/items", func(r chi.Router) {
+		r.Post("/", items.CreateItem)
+		r.Get("/", items.ListItems)
+		r.Get("/filter-options", items.FilterOptions)
+		r.Get("/stats", items.Stats)
+		r.Post("/import", items.ImportItems)
+		r.Get("/export", items.ExportItems)
+		r.Get("/{id}", items.GetItem)
+		r.Patch("/{id}", items.UpdateItem)
+		r.Delete("/{id}", items.DeleteItem)
+	})
 
-	return mux
+	return r
 }
