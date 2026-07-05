@@ -2,12 +2,24 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
-	"time"
+	"strconv"
 
-	"my-backend/internal/mocks"
+	"my-backend/internal/models"
+	"my-backend/internal/repository"
 	"my-backend/internal/response"
+
+	"github.com/go-chi/chi/v5"
 )
+
+type ItemHandler struct {
+	repo *repository.ItemRepository
+}
+
+func NewItemHandler(repo *repository.ItemRepository) *ItemHandler {
+	return &ItemHandler{repo: repo}
+}
 
 func decodeBody(r *http.Request) map[string]interface{} {
 	var body map[string]interface{}
@@ -17,97 +29,176 @@ func decodeBody(r *http.Request) map[string]interface{} {
 	return body
 }
 
+func decodeItemBody(r *http.Request) models.Item {
+	var item models.Item
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&item)
+	}
+	return item
+}
+
 // CreateItem: POST /api/v1/items
-func CreateItem(w http.ResponseWriter, r *http.Request) {
-	body := decodeBody(r)
-	item := mocks.MergeItem(mocks.Items[0], body)
-	item.ID = "665f1a1a1a1a1a1a1a1a1a99"
-	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
-	item.CreatedAt = now
-	item.UpdatedAt = now
-	response.OK(w, http.StatusCreated, item, nil)
+func (h *ItemHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
+	item := decodeItemBody(r)
+	created, err := h.repo.Create(r.Context(), item)
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create item", nil)
+		return
+	}
+	response.OK(w, http.StatusCreated, created, nil)
 }
 
 // ListItems: GET /api/v1/items
-func ListItems(w http.ResponseWriter, r *http.Request) {
-	items := make([]mocks.ItemPublic, 0, len(mocks.Items))
-	for _, it := range mocks.Items {
+func (h *ItemHandler) ListItems(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+
+	page, _ := strconv.Atoi(q.Get("page"))
+	limit, _ := strconv.Atoi(q.Get("limit"))
+
+	filters := make(map[string]string)
+	for _, field := range []string{
+		"jenisProduct", "proyek", "status", "lokasi",
+		"serialNumber", "name", "account", "ipAddress",
+		"anydesk", "rustdesk", "licenseWindows", "licenseOffice", "q",
+	} {
+		if v := q.Get(field); v != "" {
+			filters[field] = v
+		}
+	}
+
+	result, err := h.repo.List(r.Context(), repository.ListParams{
+		Page:      page,
+		Limit:     limit,
+		SortBy:    q.Get("sortBy"),
+		SortOrder: q.Get("sortOrder"),
+		Filters:   filters,
+	})
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list items", nil)
+		return
+	}
+
+	items := make([]models.ItemPublic, 0, len(result.Items))
+	for _, it := range result.Items {
 		items = append(items, it.Public())
 	}
 	meta := map[string]interface{}{
-		"total":      len(mocks.Items),
-		"page":       1,
-		"limit":      20,
-		"totalPages": 1,
+		"total":      result.Total,
+		"page":       result.Page,
+		"limit":      result.Limit,
+		"totalPages": result.TotalPages,
 	}
 	response.OK(w, http.StatusOK, items, meta)
 }
 
 // GetItem: GET /api/v1/items/{id}
-func GetItem(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "notfound" {
+func (h *ItemHandler) GetItem(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	item, err := h.repo.GetByID(r.Context(), id)
+	if errors.Is(err, repository.ErrNotFound) {
 		response.Err(w, http.StatusNotFound, "NOT_FOUND", "Item not found", nil)
 		return
 	}
-	response.OK(w, http.StatusOK, mocks.Items[0], nil)
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get item", nil)
+		return
+	}
+	response.OK(w, http.StatusOK, item, nil)
 }
 
 // UpdateItem: PATCH /api/v1/items/{id}
-func UpdateItem(w http.ResponseWriter, r *http.Request) {
-	body := decodeBody(r)
-	item := mocks.MergeItem(mocks.Items[0], body)
+func (h *ItemHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	patch := decodeBody(r)
+	item, err := h.repo.Update(r.Context(), id, patch)
+	if errors.Is(err, repository.ErrNotFound) {
+		response.Err(w, http.StatusNotFound, "NOT_FOUND", "Item not found", nil)
+		return
+	}
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update item", nil)
+		return
+	}
 	response.OK(w, http.StatusOK, item, nil)
 }
 
 // DeleteItem: DELETE /api/v1/items/{id}
-func DeleteItem(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+func (h *ItemHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	err := h.repo.Delete(r.Context(), id)
+	if errors.Is(err, repository.ErrNotFound) {
+		response.Err(w, http.StatusNotFound, "NOT_FOUND", "Item not found", nil)
+		return
+	}
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete item", nil)
+		return
+	}
 	response.OK(w, http.StatusOK, map[string]string{"_id": id}, nil)
 }
 
 // FilterOptions: GET /api/v1/items/filter-options
-func FilterOptions(w http.ResponseWriter, r *http.Request) {
-	data := map[string]interface{}{
-		"proyek":       []string{"ALPHA", "BETA", "GAMMA"},
-		"jenisProduct": []string{"Laptop", "PC", "Monitor"},
-		"lokasi":       []string{"Jakarta HQ", "Surabaya Branch"},
-		"status":       []string{"Active", "Idle", "Maintenance"},
+func (h *ItemHandler) FilterOptions(w http.ResponseWriter, r *http.Request) {
+	data, err := h.repo.FilterOptions(r.Context(), "proyek", "jenisProduct", "lokasi", "status")
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load filter options", nil)
+		return
 	}
 	response.OK(w, http.StatusOK, data, nil)
 }
 
 // Stats: GET /api/v1/items/stats
-func Stats(w http.ResponseWriter, r *http.Request) {
-	recent := make([]mocks.ItemPublic, 0, len(mocks.Items))
-	for _, it := range mocks.Items {
-		recent = append(recent, it.Public())
+func (h *ItemHandler) Stats(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	total, err := h.repo.Count(ctx)
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load stats", nil)
+		return
 	}
+	byStatus, err := h.repo.CountBy(ctx, "status")
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load stats", nil)
+		return
+	}
+	byJenisProduct, err := h.repo.CountBy(ctx, "jenisProduct")
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load stats", nil)
+		return
+	}
+	byProyek, err := h.repo.CountBy(ctx, "proyek")
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load stats", nil)
+		return
+	}
+	recent, err := h.repo.RecentlyAdded(ctx, 5)
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load stats", nil)
+		return
+	}
+
+	recentPublic := make([]models.ItemPublic, 0, len(recent))
+	for _, it := range recent {
+		recentPublic = append(recentPublic, it.Public())
+	}
+
 	data := map[string]interface{}{
-		"totalItems": 143,
-		"byStatus": []map[string]interface{}{
-			{"_id": "Active", "count": 120},
-			{"_id": "Maintenance", "count": 15},
-		},
-		"byJenisProduct": []map[string]interface{}{
-			{"_id": "Laptop", "count": 80},
-			{"_id": "PC", "count": 40},
-		},
-		"byProyek": []map[string]interface{}{
-			{"_id": "ALPHA", "count": 30},
-		},
-		"recentlyAdded": recent,
+		"totalItems":     total,
+		"byStatus":       byStatus,
+		"byJenisProduct": byJenisProduct,
+		"byProyek":       byProyek,
+		"recentlyAdded":  recentPublic,
 	}
 	response.OK(w, http.StatusOK, data, nil)
 }
 
 // ImportItems: POST /api/v1/items/import
-func ImportItems(w http.ResponseWriter, r *http.Request) {
+func (h *ItemHandler) ImportItems(w http.ResponseWriter, r *http.Request) {
 	data := map[string]int{"inserted": 0, "updated": 0, "failed": 0}
 	response.OKWithErrors(w, http.StatusOK, data, []map[string]interface{}{})
 }
 
 // ExportItems: GET /api/v1/items/export
-func ExportItems(w http.ResponseWriter, r *http.Request) {
+func (h *ItemHandler) ExportItems(w http.ResponseWriter, r *http.Request) {
 	response.Err(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "Export is not implemented in this phase", nil)
 }

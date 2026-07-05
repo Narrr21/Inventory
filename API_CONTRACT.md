@@ -1,4 +1,4 @@
-# API Contract — Phase 1 (Stub)
+# API Contract
 
 Base path: `/api/v1`. All responses use the envelope:
 
@@ -30,12 +30,12 @@ Query: `page, limit, sortBy, sortOrder, q, jenisProduct, proyek, status, lokasi,
 Note: sensitive fields (`passwordPin`, `passwordAccount`, `passwordAnydeskRustdesk`) are omitted here.
 
 ### `GET /items/{id}`
-Returns the mock item regardless of `{id}`, including sensitive fields.
+Returns the item with the given `{id}`, including sensitive fields.
 `200`
 ```json
 { "success": true, "data": { "_id": "665f1a1a1a1a1a1a1a1a1a1a", "jenisProduct": "Laptop", "serialNumber": "SN-00123", "name": "RTI-ALPHA-001", "proyek": "ALPHA", "passwordPin": "1234", "account": "user01", "passwordAccount": "secret01", "ipAddress": "10.0.0.12", "anydesk": "123 456 789", "rustdesk": "", "passwordAnydeskRustdesk": "rdpass01", "licenseWindows": "Pro", "licenseOffice": "365", "status": "Active", "lokasi": "Jakarta HQ", "deskripsi": "Contoh data dummy", "createdAt": "...", "updatedAt": "..." } }
 ```
-`{id} = "notfound"` → `404`
+Unknown `{id}` → `404`
 ```json
 { "success": false, "error": { "code": "NOT_FOUND", "message": "Item not found" } }
 ```
@@ -45,7 +45,7 @@ Body: any subset of fields to update.
 ```json
 { "status": "Rusak", "lokasi": "Gudang" }
 ```
-`200` — mock item merged with the body:
+`200` — existing item merged with the body:
 ```json
 { "success": true, "data": { "_id": "665f1a1a1a1a1a1a1a1a1a1a", "...": "...", "status": "Rusak", "lokasi": "Gudang" } }
 ```
