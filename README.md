@@ -56,6 +56,26 @@ go run main.go
 - The backend API will be live at: http://localhost:8080
 - Test endpoint: http://localhost:8080/api/hello
 
+#### 1b. Run Backend Phase 1 API Stub (Go)
+
+This is a separate, mock-only entrypoint that stubs the full `/api/v1/items` contract (see `API_CONTRACT.md`) with static data — no MongoDB required.
+
+```bash
+cd backend
+go run ./cmd/server
+```
+
+- The stub API will be live at: http://localhost:8080 (override with `PORT=<port> go run ./cmd/server`)
+- Test endpoint: http://localhost:8080/api/v1/items
+
+Every route in `API_CONTRACT.md` can be hit with curl, e.g.:
+
+```bash
+curl http://localhost:8080/api/v1/items
+curl http://localhost:8080/api/v1/items/507f191e810c19729de860ea
+curl -X POST http://localhost:8080/api/v1/items -H "Content-Type: application/json" -d '{"name":"RTI-ALPHA-005"}'
+```
+
 #### 2. Run Frontend (React + Vite)
 
 ```bash
