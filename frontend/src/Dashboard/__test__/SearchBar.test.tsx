@@ -1,5 +1,4 @@
-import { render, screen, act } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import SearchBar from "../components/SearchBar";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
@@ -28,8 +27,7 @@ describe("SearchBar Component", () => {
     expect(screen.getByPlaceholderText(/cari produk.../i)).toBeInTheDocument();
   });
 
-  it("harus memanggil onSearch dengan value yang di-trim setelah debounce selesai", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime }); // Gunakan advanceTimers untuk mengontrol waktu dalam userEvent
+  it("harus memanggil onSearch dengan value yang di-trim setelah debounce selesai", () => {
     const mockOnSearch = vi.fn();
 
     render(<SearchBar onSearch={mockOnSearch} debounceMs={400} />);
@@ -37,9 +35,8 @@ describe("SearchBar Component", () => {
     // Ambil input
     const input = screen.getByPlaceholderText(/cari.../i);
 
-    // Ketik " sepatu baru " di input
-    await act(async () => {
-      await user.type(input, " sepatu baru ");
+    act(() => {
+      fireEvent.change(input, { target: { value: " sepatu baru " } });
     });
 
     // Majukan waktu 200ms, onSearch seharusnya belum dipanggil karena debounce belum selesai
@@ -52,7 +49,7 @@ describe("SearchBar Component", () => {
 
     // Majukan waktu hingga total 400ms, onSearch seharusnya dipanggil dengan value yang di-trim
     act(() => {
-        vi.advanceTimersByTime(200);
+      vi.advanceTimersByTime(200);
     });
 
     // Pastikan onSearch dipanggil dengan value yang di-trim
