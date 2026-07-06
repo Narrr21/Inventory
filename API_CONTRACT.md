@@ -62,6 +62,13 @@ Body: any subset of fields to update.
 { "success": true, "data": { "proyek": ["ALPHA", "BETA", "GAMMA"], "jenisProduct": ["Laptop", "PC", "Monitor"], "lokasi": ["Jakarta HQ", "Surabaya Branch"], "status": ["Healthy", "Under Maintenance", "Broken"] } }
 ```
 
+### `GET /items/filter-options/lokasi`, `GET /items/filter-options/proyek`, `GET /items/filter-options/jenisProduct`
+Distinct, non-empty values for a single dropdown field (for fetching one filter column independently instead of the combined response above).
+`200`
+```json
+{ "success": true, "data": ["Jakarta HQ", "Surabaya Branch"] }
+```
+
 ### `GET /items/stats`
 `200`
 ```json
