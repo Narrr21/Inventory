@@ -10,11 +10,11 @@ Error: `{ "success": false, "error": { "code": "...", "message": "...", "fields"
 ### `POST /items`
 Body: any subset of item fields.
 ```json
-{ "jenisProduct": "Printer", "name": "RTI-DELTA-009", "status": "Active", "lokasi": "Bandung Office" }
+{ "jenisProduct": "Printer", "name": "RTI-DELTA-009", "status": "Healthy", "lokasi": "Bandung Office" }
 ```
 `201`
 ```json
-{ "success": true, "data": { "_id": "665f1a1a1a1a1a1a1a1a1a99", "jenisProduct": "Printer", "serialNumber": "SN-00123", "name": "RTI-DELTA-009", "proyek": "ALPHA", "passwordPin": "1234", "account": "user01", "passwordAccount": "secret01", "ipAddress": "10.0.0.12", "anydesk": "123 456 789", "rustdesk": "", "passwordAnydeskRustdesk": "rdpass01", "licenseWindows": "Pro", "licenseOffice": "365", "status": "Active", "lokasi": "Bandung Office", "deskripsi": "Contoh data dummy", "createdAt": "2026-07-05T05:32:51.470Z", "updatedAt": "2026-07-05T05:32:51.470Z" } }
+{ "success": true, "data": { "_id": "665f1a1a1a1a1a1a1a1a1a99", "jenisProduct": "Printer", "serialNumber": "SN-00123", "name": "RTI-DELTA-009", "proyek": "ALPHA", "passwordPin": "1234", "account": "user01", "passwordAccount": "secret01", "ipAddress": "10.0.0.12", "anydesk": "123 456 789", "rustdesk": "", "passwordAnydeskRustdesk": "rdpass01", "licenseWindows": "Pro", "licenseOffice": "365", "status": "Healthy", "lokasi": "Bandung Office", "deskripsi": "Contoh data dummy", "createdAt": "2026-07-05T05:32:51.470Z", "updatedAt": "2026-07-05T05:32:51.470Z" } }
 ```
 
 ### `GET /items`
@@ -23,7 +23,7 @@ Query: `page, limit, sortBy, sortOrder, q, jenisProduct, proyek, status, lokasi,
 ```json
 {
   "success": true,
-  "data": [ { "_id": "...", "jenisProduct": "Laptop", "serialNumber": "SN-00123", "name": "RTI-ALPHA-001", "proyek": "ALPHA", "account": "user01", "ipAddress": "10.0.0.12", "anydesk": "123 456 789", "rustdesk": "", "licenseWindows": "Pro", "licenseOffice": "365", "status": "Active", "lokasi": "Jakarta HQ", "deskripsi": "Contoh data dummy", "createdAt": "...", "updatedAt": "..." } ],
+  "data": [ { "_id": "...", "jenisProduct": "Laptop", "serialNumber": "SN-00123", "name": "RTI-ALPHA-001", "proyek": "ALPHA", "account": "user01", "ipAddress": "10.0.0.12", "anydesk": "123 456 789", "rustdesk": "", "licenseWindows": "Pro", "licenseOffice": "365", "status": "Healthy", "lokasi": "Jakarta HQ", "deskripsi": "Contoh data dummy", "createdAt": "...", "updatedAt": "..." } ],
   "meta": { "total": 4, "page": 1, "limit": 20, "totalPages": 1 }
 }
 ```
@@ -33,7 +33,7 @@ Note: sensitive fields (`passwordPin`, `passwordAccount`, `passwordAnydeskRustde
 Returns the item with the given `{id}`, including sensitive fields.
 `200`
 ```json
-{ "success": true, "data": { "_id": "665f1a1a1a1a1a1a1a1a1a1a", "jenisProduct": "Laptop", "serialNumber": "SN-00123", "name": "RTI-ALPHA-001", "proyek": "ALPHA", "passwordPin": "1234", "account": "user01", "passwordAccount": "secret01", "ipAddress": "10.0.0.12", "anydesk": "123 456 789", "rustdesk": "", "passwordAnydeskRustdesk": "rdpass01", "licenseWindows": "Pro", "licenseOffice": "365", "status": "Active", "lokasi": "Jakarta HQ", "deskripsi": "Contoh data dummy", "createdAt": "...", "updatedAt": "..." } }
+{ "success": true, "data": { "_id": "665f1a1a1a1a1a1a1a1a1a1a", "jenisProduct": "Laptop", "serialNumber": "SN-00123", "name": "RTI-ALPHA-001", "proyek": "ALPHA", "passwordPin": "1234", "account": "user01", "passwordAccount": "secret01", "ipAddress": "10.0.0.12", "anydesk": "123 456 789", "rustdesk": "", "passwordAnydeskRustdesk": "rdpass01", "licenseWindows": "Pro", "licenseOffice": "365", "status": "Healthy", "lokasi": "Jakarta HQ", "deskripsi": "Contoh data dummy", "createdAt": "...", "updatedAt": "..." } }
 ```
 Unknown `{id}` → `404`
 ```json
@@ -43,11 +43,11 @@ Unknown `{id}` → `404`
 ### `PATCH /items/{id}`
 Body: any subset of fields to update.
 ```json
-{ "status": "Rusak", "lokasi": "Gudang" }
+{ "status": "Broken", "lokasi": "Gudang" }
 ```
 `200` — existing item merged with the body:
 ```json
-{ "success": true, "data": { "_id": "665f1a1a1a1a1a1a1a1a1a1a", "...": "...", "status": "Rusak", "lokasi": "Gudang" } }
+{ "success": true, "data": { "_id": "665f1a1a1a1a1a1a1a1a1a1a", "...": "...", "status": "Broken", "lokasi": "Gudang" } }
 ```
 
 ### `DELETE /items/{id}`
@@ -59,7 +59,7 @@ Body: any subset of fields to update.
 ### `GET /items/filter-options`
 `200`
 ```json
-{ "success": true, "data": { "proyek": ["ALPHA", "BETA", "GAMMA"], "jenisProduct": ["Laptop", "PC", "Monitor"], "lokasi": ["Jakarta HQ", "Surabaya Branch"], "status": ["Active", "Idle", "Maintenance"] } }
+{ "success": true, "data": { "proyek": ["ALPHA", "BETA", "GAMMA"], "jenisProduct": ["Laptop", "PC", "Monitor"], "lokasi": ["Jakarta HQ", "Surabaya Branch"], "status": ["Healthy", "Under Maintenance", "Broken"] } }
 ```
 
 ### `GET /items/stats`
@@ -69,7 +69,7 @@ Body: any subset of fields to update.
   "success": true,
   "data": {
     "totalItems": 143,
-    "byStatus": [ { "_id": "Active", "count": 120 }, { "_id": "Maintenance", "count": 15 } ],
+    "byStatus": [ { "_id": "Healthy", "count": 120 }, { "_id": "Broken", "count": 15 } ],
     "byJenisProduct": [ { "_id": "Laptop", "count": 80 }, { "_id": "PC", "count": 40 } ],
     "byProyek": [ { "_id": "ALPHA", "count": 30 } ],
     "recentlyAdded": [ { "...4 mock items, sensitive fields omitted..." } ]
