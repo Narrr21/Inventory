@@ -192,16 +192,25 @@ func (r *ItemRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// Distinct returns the distinct, non-empty values stored for a single field.
+func (r *ItemRepository) Distinct(ctx context.Context, field string) ([]string, error) {
+	var values []string
+	if err := r.coll.Distinct(ctx, field, bson.M{"$expr": bson.M{"$ne": bson.A{"$" + field, ""}}}).Decode(&values); err != nil {
+		return nil, err
+	}
+	if values == nil {
+		values = []string{}
+	}
+	return values, nil
+}
+
 // FilterOptions returns the distinct values for each of the given fields.
 func (r *ItemRepository) FilterOptions(ctx context.Context, fields ...string) (map[string][]string, error) {
 	result := make(map[string][]string, len(fields))
 	for _, field := range fields {
-		var values []string
-		if err := r.coll.Distinct(ctx, field, bson.M{}).Decode(&values); err != nil {
+		values, err := r.Distinct(ctx, field)
+		if err != nil {
 			return nil, err
-		}
-		if values == nil {
-			values = []string{}
 		}
 		result[field] = values
 	}

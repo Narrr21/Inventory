@@ -147,6 +147,30 @@ func (h *ItemHandler) FilterOptions(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, http.StatusOK, data, nil)
 }
 
+func (h *ItemHandler) distinctFieldValues(w http.ResponseWriter, r *http.Request, field string) {
+	values, err := h.repo.Distinct(r.Context(), field)
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load filter options", nil)
+		return
+	}
+	response.OK(w, http.StatusOK, values, nil)
+}
+
+// FilterOptionsLokasi: GET /api/v1/items/filter-options/lokasi
+func (h *ItemHandler) FilterOptionsLokasi(w http.ResponseWriter, r *http.Request) {
+	h.distinctFieldValues(w, r, "lokasi")
+}
+
+// FilterOptionsProyek: GET /api/v1/items/filter-options/proyek
+func (h *ItemHandler) FilterOptionsProyek(w http.ResponseWriter, r *http.Request) {
+	h.distinctFieldValues(w, r, "proyek")
+}
+
+// FilterOptionsJenisProduct: GET /api/v1/items/filter-options/jenisProduct
+func (h *ItemHandler) FilterOptionsJenisProduct(w http.ResponseWriter, r *http.Request) {
+	h.distinctFieldValues(w, r, "jenisProduct")
+}
+
 // Stats: GET /api/v1/items/stats
 func (h *ItemHandler) Stats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

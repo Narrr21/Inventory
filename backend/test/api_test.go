@@ -267,6 +267,27 @@ func TestFilterOptionsAndStats(t *testing.T) {
 		}
 	})
 
+	t.Run("FilterOptionsPerField", func(t *testing.T) {
+		cases := []struct {
+			path string
+			want []string
+		}{
+			{"/api/v1/items/filter-options/lokasi", []string{"Jakarta HQ", "Surabaya Branch"}},
+			{"/api/v1/items/filter-options/proyek", []string{"ALPHA", "BETA"}},
+			{"/api/v1/items/filter-options/jenisProduct", []string{"Laptop", "Monitor"}},
+		}
+		for _, tc := range cases {
+			status, env := apiRequest(t, baseURL, http.MethodGet, tc.path, nil)
+			if status != http.StatusOK {
+				t.Fatalf("%s: status = %d, body = %+v", tc.path, status, env)
+			}
+			data := env["data"].([]interface{})
+			if len(data) != len(tc.want) {
+				t.Errorf("%s: data = %v, want %v", tc.path, data, tc.want)
+			}
+		}
+	})
+
 	t.Run("Stats", func(t *testing.T) {
 		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/stats", nil)
 		if status != http.StatusOK {
