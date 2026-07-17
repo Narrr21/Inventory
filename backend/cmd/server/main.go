@@ -12,9 +12,15 @@ import (
 	"my-backend/internal/db"
 	"my-backend/internal/handlers"
 	"my-backend/internal/repository"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("no .env file found, relying on already-set environment variables")
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -33,8 +39,10 @@ func main() {
 	}()
 
 	itemRepo := repository.NewItemRepository(client.Database)
-	itemHandler := handlers.NewItemHandler(itemRepo)
-	router := handlers.NewRouter(itemHandler)
+	projectRepo := repository.NewProjectRepository(client.Database)
+	itemHandler := handlers.NewItemHandler(itemRepo, projectRepo)
+	projectHandler := handlers.NewProjectHandler(projectRepo)
+	router := handlers.NewRouter(itemHandler, projectHandler)
 
 	port := os.Getenv("PORT")
 	if port == "" {

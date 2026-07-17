@@ -58,7 +58,7 @@ go run main.go
 
 #### 1b. Run Backend Items API (Go)
 
-This is a separate entrypoint that serves the full `/api/v1/items` contract (see `API_CONTRACT.md`) backed by a real MongoDB instance — set `MONGODB_URI` / `MONGODB_DB` in `backend/.env` (or export them) before running, and make sure a MongoDB instance is reachable (e.g. `docker-compose up mongo` or a local `mongod`).
+This is a separate entrypoint that serves the full `/api/v1/items` and `/api/v1/projects` contract (see `API_CONTRACT.md`) backed by a real MongoDB instance. It automatically loads `backend/.env` on startup (via [godotenv](https://github.com/joho/godotenv)) — make sure you've copied `backend/.env.example` to `backend/.env` (see step 3 above) with `MONGODB_URI` / `MONGODB_DB` set, and that a MongoDB instance is reachable (e.g. `docker-compose up mongo` or a local `mongod`). Already-exported environment variables still take precedence over `.env`.
 
 ```bash
 cd backend
@@ -68,12 +68,23 @@ go run ./cmd/server
 - The API will be live at: http://localhost:8080 (override with `PORT=<port> go run ./cmd/server`)
 - Test endpoint: http://localhost:8080/api/v1/items
 
+Every item references a project via `idProyek`, so an empty database has nothing valid to reference yet. Populate sample data first:
+
+```bash
+cd backend
+go run ./cmd/seed          # insert sample projects + items (additive)
+go run ./cmd/seed --reset  # wipe items/projects first, then insert
+```
+
 Every route in `API_CONTRACT.md` can be hit with curl, e.g.:
 
 ```bash
 curl http://localhost:8080/api/v1/items
 curl http://localhost:8080/api/v1/items/507f191e810c19729de860ea
-curl -X POST http://localhost:8080/api/v1/items -H "Content-Type: application/json" -d '{"name":"RTI-ALPHA-005"}'
+
+# or create your own project + item:
+curl -X POST http://localhost:8080/api/v1/projects -H "Content-Type: application/json" -d '{"namaProyek":"ALPHA","lokasi":"Jakarta HQ"}'
+curl -X POST http://localhost:8080/api/v1/items -H "Content-Type: application/json" -d '{"jenis":"Laptop","serialNumber":"SN-00123","nama":"RTI-ALPHA-005","status":"Healthy","idProyek":"<_id from the project response above>"}'
 ```
 
 #### 2. Run Frontend (React + Vite)
