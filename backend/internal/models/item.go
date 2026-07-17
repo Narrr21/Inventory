@@ -2,65 +2,83 @@ package models
 
 import "encoding/json"
 
+type Credentials struct {
+	Account         string `bson:"account,omitempty" json:"account,omitempty"`
+	PasswordAccount string `bson:"passwordAccount,omitempty" json:"passwordAccount,omitempty"`
+	PasswordPin     string `bson:"passwordPin,omitempty" json:"passwordPin,omitempty"`
+}
+
+type CredentialsPublic struct {
+	Account string `bson:"account,omitempty" json:"account,omitempty"`
+}
+
+type RemoteInfo struct {
+	IPAddress      string `bson:"ipAddress,omitempty" json:"ipAddress,omitempty"`
+	Anydesk        string `bson:"anydesk,omitempty" json:"anydesk,omitempty"`
+	Rustdesk       string `bson:"rustdesk,omitempty" json:"rustdesk,omitempty"`
+	PasswordRemote string `bson:"passwordRemote,omitempty" json:"passwordRemote,omitempty"`
+}
+
+type RemoteInfoPublic struct {
+	IPAddress string `bson:"ipAddress,omitempty" json:"ipAddress,omitempty"`
+	Anydesk   string `bson:"anydesk,omitempty" json:"anydesk,omitempty"`
+	Rustdesk  string `bson:"rustdesk,omitempty" json:"rustdesk,omitempty"`
+}
+
 type Item struct {
-	ID                      string `bson:"_id" json:"_id"`
-	JenisProduct            string `bson:"jenisProduct" json:"jenisProduct"`
-	SerialNumber            string `bson:"serialNumber" json:"serialNumber"`
-	Name                    string `bson:"name" json:"name"`
-	Proyek                  string `bson:"proyek" json:"proyek"`
-	PasswordPin             string `bson:"passwordPin" json:"passwordPin"`
-	Account                 string `bson:"account" json:"account"`
-	PasswordAccount         string `bson:"passwordAccount" json:"passwordAccount"`
-	IPAddress               string `bson:"ipAddress" json:"ipAddress"`
-	Anydesk                 string `bson:"anydesk" json:"anydesk"`
-	Rustdesk                string `bson:"rustdesk" json:"rustdesk"`
-	PasswordAnydeskRustdesk string `bson:"passwordAnydeskRustdesk" json:"passwordAnydeskRustdesk"`
-	LicenseWindows          string `bson:"licenseWindows" json:"licenseWindows"`
-	LicenseOffice           string `bson:"licenseOffice" json:"licenseOffice"`
-	Status                  string `bson:"status" json:"status"`
-	Lokasi                  string `bson:"lokasi" json:"lokasi"`
-	Deskripsi               string `bson:"deskripsi" json:"deskripsi"`
-	CreatedAt               string `bson:"createdAt" json:"createdAt"`
-	UpdatedAt               string `bson:"updatedAt" json:"updatedAt"`
+	ID               string                 `bson:"_id" json:"_id"`
+	Jenis            string                 `bson:"jenis" json:"jenis"`
+	SerialNumber     string                 `bson:"serialNumber" json:"serialNumber"`
+	Nama             string                 `bson:"nama" json:"nama"`
+	IdProyek         string                 `bson:"idProyek" json:"idProyek"`
+	Credentials      Credentials            `bson:"credentials" json:"credentials"`
+	RemoteInfo       RemoteInfo             `bson:"remoteInfo" json:"remoteInfo"`
+	LicenseWindows   string                 `bson:"licenseWindows" json:"licenseWindows"`
+	LicenseOffice    string                 `bson:"licenseOffice" json:"licenseOffice"`
+	Status           string                 `bson:"status" json:"status"`
+	Deskripsi        string                 `bson:"deskripsi" json:"deskripsi"`
+	CustomAttributes map[string]interface{} `bson:"customAttributes,omitempty" json:"customAttributes,omitempty"`
+	CreatedAt        string                 `bson:"createdAt" json:"createdAt"`
+	UpdatedAt        string                 `bson:"updatedAt" json:"updatedAt"`
 }
 
 type ItemPublic struct {
-	ID             string `json:"_id"`
-	JenisProduct   string `json:"jenisProduct"`
-	SerialNumber   string `json:"serialNumber"`
-	Name           string `json:"name"`
-	Proyek         string `json:"proyek"`
-	Account        string `json:"account"`
-	IPAddress      string `json:"ipAddress"`
-	Anydesk        string `json:"anydesk"`
-	Rustdesk       string `json:"rustdesk"`
-	LicenseWindows string `json:"licenseWindows"`
-	LicenseOffice  string `json:"licenseOffice"`
-	Status         string `json:"status"`
-	Lokasi         string `json:"lokasi"`
-	Deskripsi      string `json:"deskripsi"`
-	CreatedAt      string `json:"createdAt"`
-	UpdatedAt      string `json:"updatedAt"`
+	ID               string                 `json:"_id"`
+	Jenis            string                 `json:"jenis"`
+	SerialNumber     string                 `json:"serialNumber"`
+	Nama             string                 `json:"nama"`
+	IdProyek         string                 `json:"idProyek"`
+	Credentials      CredentialsPublic      `json:"credentials"`
+	RemoteInfo       RemoteInfoPublic       `json:"remoteInfo"`
+	LicenseWindows   string                 `json:"licenseWindows"`
+	LicenseOffice    string                 `json:"licenseOffice"`
+	Status           string                 `json:"status"`
+	Deskripsi        string                 `json:"deskripsi"`
+	CustomAttributes map[string]interface{} `json:"customAttributes,omitempty"`
+	CreatedAt        string                 `json:"createdAt"`
+	UpdatedAt        string                 `json:"updatedAt"`
 }
 
 func (i Item) Public() ItemPublic {
 	return ItemPublic{
-		ID:             i.ID,
-		JenisProduct:   i.JenisProduct,
-		SerialNumber:   i.SerialNumber,
-		Name:           i.Name,
-		Proyek:         i.Proyek,
-		Account:        i.Account,
-		IPAddress:      i.IPAddress,
-		Anydesk:        i.Anydesk,
-		Rustdesk:       i.Rustdesk,
-		LicenseWindows: i.LicenseWindows,
-		LicenseOffice:  i.LicenseOffice,
-		Status:         i.Status,
-		Lokasi:         i.Lokasi,
-		Deskripsi:      i.Deskripsi,
-		CreatedAt:      i.CreatedAt,
-		UpdatedAt:      i.UpdatedAt,
+		ID:           i.ID,
+		Jenis:        i.Jenis,
+		SerialNumber: i.SerialNumber,
+		Nama:         i.Nama,
+		IdProyek:     i.IdProyek,
+		Credentials:  CredentialsPublic{Account: i.Credentials.Account},
+		RemoteInfo: RemoteInfoPublic{
+			IPAddress: i.RemoteInfo.IPAddress,
+			Anydesk:   i.RemoteInfo.Anydesk,
+			Rustdesk:  i.RemoteInfo.Rustdesk,
+		},
+		LicenseWindows:   i.LicenseWindows,
+		LicenseOffice:    i.LicenseOffice,
+		Status:           i.Status,
+		Deskripsi:        i.Deskripsi,
+		CustomAttributes: i.CustomAttributes,
+		CreatedAt:        i.CreatedAt,
+		UpdatedAt:        i.UpdatedAt,
 	}
 }
 

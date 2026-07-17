@@ -39,8 +39,10 @@ func main() {
 	}()
 
 	itemRepo := repository.NewItemRepository(client.Database)
-	itemHandler := handlers.NewItemHandler(itemRepo)
-	router := handlers.NewRouter(itemHandler)
+	projectRepo := repository.NewProjectRepository(client.Database)
+	itemHandler := handlers.NewItemHandler(itemRepo, projectRepo)
+	projectHandler := handlers.NewProjectHandler(projectRepo)
+	router := handlers.NewRouter(itemHandler, projectHandler)
 
 	port := os.Getenv("PORT")
 	if port == "" {

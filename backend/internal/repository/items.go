@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"my-backend/internal/models"
@@ -16,17 +17,18 @@ var ErrNotFound = errors.New("repository: item not found")
 
 const itemsCollection = "items"
 
-// allowed equality filter fields for ListItems.
+// allowed equality filter fields for ListItems. Password-bearing fields are
+// deliberately excluded, consistent with them being excluded from ItemPublic.
 var listFilterFields = []string{
-	"jenisProduct", "proyek", "status", "lokasi",
-	"serialNumber", "name", "account", "ipAddress",
-	"anydesk", "rustdesk", "licenseWindows", "licenseOffice",
+	"jenis", "serialNumber", "nama", "idProyek", "status",
+	"licenseWindows", "licenseOffice",
+	"credentials.account", "remoteInfo.ipAddress", "remoteInfo.anydesk", "remoteInfo.rustdesk",
 }
 
 // allowed sort fields for ListItems.
 var listSortFields = map[string]bool{
-	"name": true, "createdAt": true, "updatedAt": true,
-	"status": true, "proyek": true, "jenisProduct": true, "lokasi": true,
+	"nama": true, "createdAt": true, "updatedAt": true,
+	"status": true, "idProyek": true, "jenis": true,
 }
 
 type ItemRepository struct {
@@ -64,6 +66,11 @@ type ListParams struct {
 	SortBy    string
 	SortOrder string
 	Filters   map[string]string
+
+	CreatedFrom string
+	CreatedTo   string
+	UpdatedFrom string
+	UpdatedTo   string
 }
 
 type ListResult struct {
@@ -91,11 +98,40 @@ func (r *ItemRepository) List(ctx context.Context, params ListParams) (ListResul
 			filter[field] = v
 		}
 	}
+	// customAttributes keys are arbitrary, so they can't be enumerated in
+	// listFilterFields — trust any customAttributes.<key> filter the handler
+	// already validated the prefix on.
+	for field, v := range params.Filters {
+		if strings.HasPrefix(field, "customAttributes.") && v != "" {
+			filter[field] = v
+		}
+	}
 	if q, ok := params.Filters["q"]; ok && q != "" {
 		filter["$or"] = bson.A{
-			bson.M{"name": bson.M{"$regex": q, "$options": "i"}},
+			bson.M{"nama": bson.M{"$regex": q, "$options": "i"}},
 			bson.M{"serialNumber": bson.M{"$regex": q, "$options": "i"}},
 		}
+	}
+
+	if params.CreatedFrom != "" || params.CreatedTo != "" {
+		rangeFilter := bson.M{}
+		if params.CreatedFrom != "" {
+			rangeFilter["$gte"] = params.CreatedFrom
+		}
+		if params.CreatedTo != "" {
+			rangeFilter["$lte"] = params.CreatedTo
+		}
+		filter["createdAt"] = rangeFilter
+	}
+	if params.UpdatedFrom != "" || params.UpdatedTo != "" {
+		rangeFilter := bson.M{}
+		if params.UpdatedFrom != "" {
+			rangeFilter["$gte"] = params.UpdatedFrom
+		}
+		if params.UpdatedTo != "" {
+			rangeFilter["$lte"] = params.UpdatedTo
+		}
+		filter["updatedAt"] = rangeFilter
 	}
 
 	total, err := r.coll.CountDocuments(ctx, filter)
@@ -104,7 +140,7 @@ func (r *ItemRepository) List(ctx context.Context, params ListParams) (ListResul
 	}
 
 	sortField := "createdAt"
-	if listSortFields[params.SortBy] {
+	if listSortFields[params.SortBy] || strings.HasPrefix(params.SortBy, "customAttributes.") {
 		sortField = params.SortBy
 	}
 	sortOrder := -1
