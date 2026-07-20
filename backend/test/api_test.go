@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -119,10 +120,17 @@ func requestStatus(t *testing.T, baseURL, method, path string) int {
 	return resp.StatusCode
 }
 
+// projectSeq gives each auto-created default project a distinct namaProyek,
+// since that field is now uniqueness-validated server-side and several
+// tests/helpers call createProject(t, baseURL, nil) more than once against
+// the same shared per-test database.
+var projectSeq int
+
 func createProject(t *testing.T, baseURL string, overrides map[string]interface{}) map[string]interface{} {
 	t.Helper()
+	projectSeq++
 	body := map[string]interface{}{
-		"namaProyek": "ALPHA",
+		"namaProyek": fmt.Sprintf("ALPHA-%d", projectSeq),
 		"lokasi":     "Jakarta HQ",
 	}
 	for k, v := range overrides {
@@ -328,7 +336,7 @@ func TestItemValidation(t *testing.T) {
 		if status != http.StatusUnprocessableEntity {
 			t.Fatalf("status = %d, want 422, body = %+v", status, env)
 		}
-		assertValidationError(t, env, "jenis", "nama", "status", "idProyek")
+		assertValidationError(t, env, "jenis", "status", "idProyek")
 	})
 
 	t.Run("CreateUnknownProject", func(t *testing.T) {
@@ -347,12 +355,40 @@ func TestItemValidation(t *testing.T) {
 		itemID := created["_id"].(string)
 
 		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/items/"+itemID, map[string]interface{}{
-			"nama": "",
+			"status": "",
 		})
 		if status != http.StatusUnprocessableEntity {
 			t.Fatalf("status = %d, want 422, body = %+v", status, env)
 		}
-		assertValidationError(t, env, "nama")
+		assertValidationError(t, env, "status")
+	})
+
+	// nama is explicitly optional per CLAUDE.md/api-contract.md — create and
+	// update must both succeed without it.
+	t.Run("CreateWithoutNamaSucceeds", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/items", map[string]interface{}{
+			"jenis": "Laptop", "serialNumber": "SN-NO-NAMA", "status": "Active",
+			"idProyek": createProject(t, baseURL, nil)["_id"],
+		})
+		if status != http.StatusCreated {
+			t.Fatalf("status = %d, want 201, body = %+v", status, env)
+		}
+	})
+
+	t.Run("UpdateClearingNamaSucceeds", func(t *testing.T) {
+		created := createItem(t, baseURL, nil)
+		itemID := created["_id"].(string)
+
+		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/items/"+itemID, map[string]interface{}{
+			"nama": "",
+		})
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, want 200, body = %+v", status, env)
+		}
+		data := env["data"].(map[string]interface{})
+		if data["nama"] != "" {
+			t.Errorf("nama = %v, want empty string", data["nama"])
+		}
 	})
 }
 
@@ -688,5 +724,235 @@ func TestUnknownRouteReturns404(t *testing.T) {
 	status := requestStatus(t, baseURL, http.MethodGet, "/api/v1/does-not-exist")
 	if status != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", status)
+	}
+}
+
+// TestProjectsFullCRUD exercises UC06-UC08 (Get/Update/Delete Proyek), the
+// endpoints the v4 api-contract added on top of the create+list pair that
+// used to be all Project supported.
+func TestProjectsFullCRUD(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+
+	t.Run("Get", func(t *testing.T) {
+		created := createProject(t, baseURL, map[string]interface{}{"namaProyek": "EPSILON"})
+		id := created["_id"].(string)
+
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/projects/"+id, nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].(map[string]interface{})
+		if data["namaProyek"] != "EPSILON" {
+			t.Errorf("namaProyek = %v, want EPSILON", data["namaProyek"])
+		}
+	})
+
+	t.Run("GetNotFound", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/projects/000000000000000000000000", nil)
+		if status != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404, body = %+v", status, env)
+		}
+	})
+
+	t.Run("Update", func(t *testing.T) {
+		created := createProject(t, baseURL, map[string]interface{}{"namaProyek": "ZETA", "lokasi": "Jakarta HQ"})
+		id := created["_id"].(string)
+
+		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/projects/"+id, map[string]interface{}{
+			"lokasi": "Bandung Office - Lantai 2",
+		})
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].(map[string]interface{})
+		if data["namaProyek"] != "ZETA" || data["lokasi"] != "Bandung Office - Lantai 2" {
+			t.Errorf("data = %+v, want namaProyek=ZETA lokasi=Bandung Office - Lantai 2", data)
+		}
+	})
+
+	t.Run("UpdateBlankNamaProyekRejected", func(t *testing.T) {
+		created := createProject(t, baseURL, map[string]interface{}{"namaProyek": "ETA"})
+		id := created["_id"].(string)
+
+		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/projects/"+id, map[string]interface{}{
+			"namaProyek": "",
+		})
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want 422, body = %+v", status, env)
+		}
+		errObj := env["error"].(map[string]interface{})
+		if errObj["code"] != "VALIDATION_ERROR" {
+			t.Errorf("error.code = %v, want VALIDATION_ERROR", errObj["code"])
+		}
+	})
+
+	t.Run("UpdateNotFound", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/projects/000000000000000000000000",
+			map[string]interface{}{"lokasi": "Somewhere"})
+		if status != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404, body = %+v", status, env)
+		}
+	})
+
+	t.Run("Delete", func(t *testing.T) {
+		created := createProject(t, baseURL, map[string]interface{}{"namaProyek": "THETA"})
+		id := created["_id"].(string)
+
+		status, env := apiRequest(t, baseURL, http.MethodDelete, "/api/v1/projects/"+id, nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+
+		status, env = apiRequest(t, baseURL, http.MethodGet, "/api/v1/projects/"+id, nil)
+		if status != http.StatusNotFound {
+			t.Fatalf("status after delete = %d, want 404, body = %+v", status, env)
+		}
+	})
+
+	t.Run("DeleteNotBlockedByReferencingItem", func(t *testing.T) {
+		project := createProject(t, baseURL, map[string]interface{}{"namaProyek": "IOTA"})
+		id := project["_id"].(string)
+		createItem(t, baseURL, map[string]interface{}{"idProyek": id})
+
+		status, env := apiRequest(t, baseURL, http.MethodDelete, "/api/v1/projects/"+id, nil)
+		if status != http.StatusOK {
+			t.Fatalf("delete should not be blocked by referencing item: status = %d, body = %+v", status, env)
+		}
+	})
+}
+
+// TestProjectsNamaProyekUniqueness exercises knowledge-base.md decision #12:
+// namaProyek must be unique (case-sensitive, exact match) on both create and
+// update, with update excluding the project's own document from the check.
+func TestProjectsNamaProyekUniqueness(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+	createProject(t, baseURL, map[string]interface{}{"namaProyek": "KAPPA"})
+
+	t.Run("CreateDuplicateRejected", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/projects", map[string]interface{}{
+			"namaProyek": "KAPPA",
+		})
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want 422, body = %+v", status, env)
+		}
+		errObj := env["error"].(map[string]interface{})
+		fields := errObj["fields"].(map[string]interface{})
+		if _, ok := fields["namaProyek"]; !ok {
+			t.Errorf("expected error.fields.namaProyek, got %+v", fields)
+		}
+	})
+
+	t.Run("CreateDifferentCaseAllowed", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/projects", map[string]interface{}{
+			"namaProyek": "kappa",
+		})
+		if status != http.StatusCreated {
+			t.Fatalf("case-sensitive uniqueness should allow differently-cased name: status = %d, body = %+v", status, env)
+		}
+	})
+
+	t.Run("UpdateToDuplicateRejected", func(t *testing.T) {
+		other := createProject(t, baseURL, map[string]interface{}{"namaProyek": "LAMBDA"})
+		id := other["_id"].(string)
+
+		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/projects/"+id, map[string]interface{}{
+			"namaProyek": "KAPPA",
+		})
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want 422, body = %+v", status, env)
+		}
+	})
+
+	t.Run("UpdateKeepingOwnNameAllowed", func(t *testing.T) {
+		created := createProject(t, baseURL, map[string]interface{}{"namaProyek": "MU", "lokasi": "A"})
+		id := created["_id"].(string)
+
+		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/projects/"+id, map[string]interface{}{
+			"namaProyek": "MU", "lokasi": "B",
+		})
+		if status != http.StatusOK {
+			t.Fatalf("re-submitting own unchanged name should not be treated as duplicate: status = %d, body = %+v", status, env)
+		}
+	})
+}
+
+// TestMalformedBody exercises the 400 MALFORMED_BODY path shared across
+// every mutating endpoint: an empty body, invalid JSON, or JSON that isn't
+// an object.
+func TestMalformedBody(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+
+	postRaw := func(t *testing.T, path, rawBody string) (int, map[string]interface{}) {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodPost, baseURL+path, bytes.NewBufferString(rawBody))
+		if err != nil {
+			t.Fatalf("failed to build request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		var env map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+			t.Fatalf("failed to decode response body: %v", err)
+		}
+		return resp.StatusCode, env
+	}
+
+	assertMalformed := func(t *testing.T, status int, env map[string]interface{}) {
+		t.Helper()
+		if status != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400, body = %+v", status, env)
+		}
+		errObj, ok := env["error"].(map[string]interface{})
+		if !ok || errObj["code"] != "MALFORMED_BODY" {
+			t.Errorf("error = %+v, want code MALFORMED_BODY", env["error"])
+		}
+	}
+
+	t.Run("EmptyBodyOnCreateItem", func(t *testing.T) {
+		status, env := postRaw(t, "/api/v1/items", "")
+		assertMalformed(t, status, env)
+	})
+
+	t.Run("InvalidJSONOnCreateItem", func(t *testing.T) {
+		status, env := postRaw(t, "/api/v1/items", "{not valid json")
+		assertMalformed(t, status, env)
+	})
+
+	t.Run("JSONArrayOnCreateItem", func(t *testing.T) {
+		status, env := postRaw(t, "/api/v1/items", "[1,2,3]")
+		assertMalformed(t, status, env)
+	})
+
+	t.Run("EmptyBodyOnCreateProject", func(t *testing.T) {
+		status, env := postRaw(t, "/api/v1/projects", "")
+		assertMalformed(t, status, env)
+	})
+
+	t.Run("EmptyObjectIsNotMalformed", func(t *testing.T) {
+		// A valid-but-empty JSON object is not MALFORMED_BODY — it should
+		// fall through to normal required-field validation (422), not 400.
+		status, env := postRaw(t, "/api/v1/items", "{}")
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want 422 (empty object is valid JSON, just missing required fields), body = %+v", status, env)
+		}
+	})
+}
+
+// TestListLimitClamp checks that GET /items?limit=... is clamped to a
+// maximum of 100 rather than honored as-is or rejected.
+func TestListLimitClamp(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+
+	status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items?limit=500", nil)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, body = %+v", status, env)
+	}
+	meta := env["meta"].(map[string]interface{})
+	if meta["limit"].(float64) != 100 {
+		t.Errorf("meta.limit = %v, want clamped to 100", meta["limit"])
 	}
 }

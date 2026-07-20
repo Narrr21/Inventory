@@ -91,6 +91,9 @@ func (r *ItemRepository) List(ctx context.Context, params ListParams) (ListResul
 	if limit < 1 {
 		limit = 20
 	}
+	if limit > 100 {
+		limit = 100
+	}
 
 	filter := bson.M{}
 	for _, field := range listFilterFields {

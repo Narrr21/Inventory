@@ -27,6 +27,9 @@ func NewRouter(items *ItemHandler, projects *ProjectHandler) chi.Router {
 	r.Route("/api/v1/projects", func(r chi.Router) {
 		r.Post("/", projects.CreateProject)
 		r.Get("/", projects.ListProjects)
+		r.Get("/{id}", projects.GetProject)
+		r.Patch("/{id}", projects.UpdateProject)
+		r.Delete("/{id}", projects.DeleteProject)
 	})
 
 	return r

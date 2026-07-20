@@ -69,3 +69,53 @@ func (r *ProjectRepository) Exists(ctx context.Context, id string) (bool, error)
 	}
 	return count > 0, nil
 }
+
+// ExistsByNamaProyek reports whether a project with the given namaProyek
+// (case-sensitive, exact match) already exists. If excludeID is non-empty,
+// that project's own document is excluded from the check, so a PATCH can
+// re-validate uniqueness without tripping on itself.
+func (r *ProjectRepository) ExistsByNamaProyek(ctx context.Context, namaProyek string, excludeID string) (bool, error) {
+	filter := bson.M{"namaProyek": namaProyek}
+	if excludeID != "" {
+		filter["_id"] = bson.M{"$ne": excludeID}
+	}
+	count, err := r.coll.CountDocuments(ctx, filter)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// Update replaces namaProyek/lokasi on an existing project and returns the
+// updated document, or ErrNotFound.
+func (r *ProjectRepository) Update(ctx context.Context, id string, project models.Project) (models.Project, error) {
+	after := options.After
+	var updated models.Project
+	err := r.coll.FindOneAndUpdate(
+		ctx,
+		bson.M{"_id": id},
+		bson.M{"$set": bson.M{"namaProyek": project.NamaProyek, "lokasi": project.Lokasi}},
+		options.FindOneAndUpdate().SetReturnDocument(after),
+	).Decode(&updated)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return models.Project{}, ErrNotFound
+	}
+	if err != nil {
+		return models.Project{}, err
+	}
+	return updated, nil
+}
+
+// Delete removes a project by ID, or returns ErrNotFound. There is
+// deliberately no check for referencing items — DELETE /projects/{id} is not
+// blocked, and referencing items become orphaned (idProyek pointing nowhere).
+func (r *ProjectRepository) Delete(ctx context.Context, id string) error {
+	res, err := r.coll.DeleteOne(ctx, bson.M{"_id": id})
+	if err != nil {
+		return err
+	}
+	if res.DeletedCount == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
