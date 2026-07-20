@@ -24,16 +24,18 @@ export interface FilterOption {
 }
 
 export interface BackendItem {
-  id: string;
-  name: string;
-  serial_number: string;
-  license_windows: string;
-  license_office: string;
-  status: string;
+  _id: string;
   jenis: string;
-  proyek: string;
-  created_at?: string;
+  serialNumber: string;
+  nama: string;
+  idProyek: string;
   credentials?: Record<string, string>;
   remote_info?: Record<string, string>;
-  other?: Record<string, string>;
+  license_windows?: string;
+  license_office?: string;
+  status: string;
+  deskripsi?: string;
+  customAttributes?: Record<string, string>;
+  created_at: string;
+  updated_at: string;
 }

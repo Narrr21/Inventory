@@ -12,11 +12,11 @@ interface ControlRowProps {
   statusOptions: StatusOption[];
   onStatusChange: (value: string) => void;
   projectOptions: FilterOption[];
-  projectSelected: string[];
-  onProjectChange: (values: string[]) => void;
+  projectSelected: string;
+  onProjectChange: (value: string) => void;
   jenisOptions: FilterOption[];
-  jenisSelected: string[];
-  onJenisChange: (values: string[]) => void;
+  jenisSelected: string;
+  onJenisChange: (value: string) => void;
   onAddItem: () => void;
 }
 

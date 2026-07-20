@@ -29,7 +29,7 @@ const DEFAULT_FORM: ItemFormData = {
   proyek: "",
   credentials: [],
   remote_info: [],
-  other: [],
+  customAttributes: [],
 };
 
 export const ItemFormModal: React.FC<ItemFormModalProps> = ({
@@ -58,7 +58,7 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
   };
 
   const handleSectionFieldChange = (
-    sectionKey: "credentials" | "remote_info" | "other",
+    sectionKey: "credentials" | "remote_info" | "customAttributes",
     fieldId: string,
     updated: Partial<FieldInfo>
   ) => {
@@ -70,7 +70,7 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
     }));
   };
 
-  const handleAddSectionField = (sectionKey: "credentials" | "remote_info" | "other") => {
+  const handleAddSectionField = (sectionKey: "credentials" | "remote_info" | "customAttributes") => {
     const newField: FieldInfo = {
       id: Date.now().toString(),
       label: "Label Baru",
@@ -161,10 +161,10 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
       />
 
       <BaseSection
-        label="Other"
-        fields={formData.other}
-        onChangeField={(id, updated) => handleSectionFieldChange("other", id, updated)}
-        onAddField={() => handleAddSectionField("other")}
+        label="Custom Attributes"
+        fields={formData.customAttributes}
+        onChangeField={(id, updated) => handleSectionFieldChange("customAttributes", id, updated)}
+        onAddField={() => handleAddSectionField("customAttributes")}
       />
     </BaseForm>
   );

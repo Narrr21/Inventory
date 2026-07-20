@@ -31,33 +31,38 @@ const EMPTY_FILTER_OPTIONS: FilterOptionsResponse = {
 const COLUMNS: ColumnDef[] = [
   {
     label: "ID",
-    key: "id",
-    width: 10,
+    key: "_id",
+    width: 100,
   },
   {
     label: "Nama Barang",
-    key: "name",
-    width: 30,
+    key: "nama",
+    width: 300,
+  },
+  {
+    label: "Serial Number",
+    key: "serialNumber",
+    width: 150,
   },
   {
     label: "Project",
-    key: "proyek",
-    width: 20,
+    key: "idProyek",
+    width: 150,
   },
   {
     label: "Jenis",
     key: "jenis",
-    width: 15,
+    width: 200,
   },
   {
     label: "Status",
     key: "status",
-    width: 15,
+    width: 150,
   },
   {
     label: "Aksi",
     key: "actions",
-    width: 10,
+    width: 100,
     sortable: false,
   }
 ];
@@ -71,8 +76,8 @@ const STATUS_OPTIONS: FilterOption[] = [
 const Dashboard: React.FC = () => {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
-  const [projectSelected, setProjectSelected] = useState<string[]>([]);
-  const [jenisBarangSelected, setJenisBarangSelected] = useState<string[]>([]);
+  const [project, setProject] = useState("");
+  const [jenis, setJenis] = useState("");
   const [sortKey, setSortKey] = useState<string | undefined>(undefined);
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [page, setPage] = useState(1);
@@ -82,7 +87,7 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [filterOptions, setFilterOptions] =
+  const [filterOptions, setFilterOptions] = useState<FilterOptionsResponse>(EMPTY_FILTER_OPTIONS);
     useState<FilterOptionsResponse>(EMPTY_FILTER_OPTIONS);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -106,8 +111,8 @@ const Dashboard: React.FC = () => {
   }, [
     search,
     status,
-    projectSelected,
-    jenisBarangSelected,
+    project,
+    jenis,
     sortKey,
     sortDirection,
   ]);
@@ -125,12 +130,12 @@ const Dashboard: React.FC = () => {
       {
         search,
         status,
-        project: projectSelected,
-        jenis: jenisBarangSelected,
-        sortKey,
-        sortDirection,
+        proyek: project,
+        jenis: jenis,
+        sortBy: sortKey,
+        sortOrder: sortDirection,
         page,
-        pageSize: PAGE_SIZE,
+        limit: PAGE_SIZE,
       },
       controller.signal,
     )
@@ -152,8 +157,8 @@ const Dashboard: React.FC = () => {
   }, [
     search,
     status,
-    projectSelected,
-    jenisBarangSelected,
+    project,
+    jenis,
     sortKey,
     sortDirection,
     page,
@@ -176,7 +181,7 @@ const Dashboard: React.FC = () => {
   };
 
   const handleEditClick = (index: string) => {
-    const rawBackendData = data?.rows.find((item) => item.id === index);
+    const rawBackendData = data?.data.find((item) => item._id === index);
     if (!rawBackendData) return;
 
     // Transformasi data backend lewat Inventory API & Mapper contoh:
@@ -214,9 +219,9 @@ const Dashboard: React.FC = () => {
     setIsModalOpen(false);
   };
 
-  const rows = data?.rows ?? [];
-  const total = data?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rows = data?.data ?? [];
+  const total = data?.meta.total ?? 0;
+  const pageCount = data?.meta.totalPages ?? 0;
 
   return (
     <MainLayout>
@@ -239,11 +244,11 @@ const Dashboard: React.FC = () => {
           statusOptions={STATUS_OPTIONS}
           onStatusChange={setStatus}
           projectOptions={filterOptions.project}
-          projectSelected={projectSelected}
-          onProjectChange={setProjectSelected}
+          projectSelected={project}
+          onProjectChange={setProject}
           jenisOptions={filterOptions.jenis}
-          jenisSelected={jenisBarangSelected}
-          onJenisChange={setJenisBarangSelected}
+          jenisSelected={jenis}
+          onJenisChange={setJenis}
           onAddItem={handleAddClick}
         />
 

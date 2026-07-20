@@ -22,5 +22,5 @@ export interface ItemFormData {
   proyek: string;
   credentials: FieldInfo[];
   remote_info: FieldInfo[];
-  other: FieldInfo[];
+  customAttributes: FieldInfo[];
 }

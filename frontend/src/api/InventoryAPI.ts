@@ -4,19 +4,25 @@ const USE_MOCK = true;
 // Note: Dapat menghapus USE_MOCK dan logic MOCK dibawah jika backend selesai
 
 export interface InventoryQueryParams {
-  search: string;
-  status: string;
-  project: string[];
-  jenis: string[];
-  sortKey?: string;
-  sortDirection: SortDirection;
+  jenis?: string;
+  status?: string;
+  proyek?: string;
+  search?: string;
+  sortBy?: string;
+  sortOrder?: SortDirection;
   page: number;
-  pageSize: number;
+  limit: number;
 }
 
 export interface InventoryResponse {
-  rows: BackendItem[];
-  total: number;
+  success: boolean;
+  data: BackendItem[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
 }
 
 export interface FilterOptionsResponse {
@@ -45,15 +51,16 @@ const NAMA_POOL = [
 ];
 
 const MOCK_DB: BackendItem[] = Array.from({ length: 200 }, (_, i) => ({
-  id: `item-${i + 1}`,
-  name: NAMA_POOL[i % NAMA_POOL.length],
-  serial_number: `SN-${1000 + i}`,
+  _id: `item-${i + 1}`,
+  nama: NAMA_POOL[i % NAMA_POOL.length],
+  serialNumber: `SN-${1000 + i}`,
   license_windows: `WIN-${2000 + i}`,
   license_office: `OFFICE-${3000 + i}`,
   status: STATUS_POOL[i % STATUS_POOL.length],
   jenis: JENIS_POOL[i % JENIS_POOL.length],
-  proyek: PROJECT_POOL[i % PROJECT_POOL.length],
+  idProyek: PROJECT_POOL[i % PROJECT_POOL.length],
   created_at: new Date(Date.now() - i * 1000 * 60 * 60 * 24).toISOString(),
+  updated_at: new Date(Date.now() - i * 1000 * 60 * 60 * 24).toISOString(),
   credentials: {
     username: `user${i + 1}`,
     password: `pass${i + 1}`,
@@ -62,7 +69,7 @@ const MOCK_DB: BackendItem[] = Array.from({ length: 200 }, (_, i) => ({
     ip_address: `192.168.1.${i + 1}`,
     mac_address: `00:1A:2B:3C:4D:${(i + 1).toString(16).padStart(2, "0")}`,
   },
-  other: {
+  customAttributes: {
     notes: `Catatan untuk item ${i + 1}`,
   },
 }));
@@ -84,32 +91,44 @@ async function fetchInventoryMock(
 ): Promise<InventoryResponse> {
   let rows = MOCK_DB.filter((row) => {
     const matchesSearch =
-      params.search === "" ||
-      String(row.name).toLowerCase().includes(params.search.toLowerCase());
+      params.search === "" || row.nama.toLowerCase().includes(params.search?.toLowerCase() ?? "") ||
+      row.serialNumber.toLowerCase().includes(params.search?.toLowerCase() ?? "");
     const matchesStatus = params.status === "" || row.status === params.status;
-    const matchesProject = params.project.length === 0 || params.project.includes(String(row.proyek));
+    const matchesProject = params.proyek === "" || row.idProyek === params.proyek;
     const matchesJenis =
-      params.jenis.length === 0 || params.jenis.includes(String(row.jenis));
+      params.jenis === "" || row.jenis === params.jenis;
     return matchesSearch && matchesStatus && matchesProject && matchesJenis;
   });
 
-  if (params.sortKey) {
-    const key = params.sortKey;
+  if (params.sortBy) {
+    const key = params.sortBy;
     rows = [...rows].sort((a, b) => {
       const av = String(a[key as keyof BackendItem] ?? "").toLowerCase();
       const bv = String(b[key as keyof BackendItem] ?? "").toLowerCase();
-      if (av === "" && bv !== "") return params.sortDirection === "asc" ? 1 : -1;
+      if (av === "" && bv !== "") return params.sortOrder === "asc" ? 1 : -1;
       if (av === bv) return 0;
       const result = av > bv ? 1 : -1;
-      return params.sortDirection === "asc" ? result : -result;
+      return params.sortOrder === "asc" ? result : -result;
     });
   }
 
   const total = rows.length;
-  const start = (params.page - 1) * params.pageSize;
-  const paged = rows.slice(start, start + params.pageSize);
+  const start = (params.page - 1) * params.limit;
+  const paged = rows.slice(start, start + params.limit);
 
-  return simulateNetwork({ rows: paged, total }, signal);
+  return simulateNetwork(
+    {
+      success: true,
+      data: paged,
+      meta: {
+        total,
+        page: params.page,
+        limit: params.limit,
+        totalPages: Math.ceil(total / params.limit),
+      },
+    },
+    signal
+  );
 }
 
 async function fetchFilterOptionsMock(signal?: AbortSignal): Promise<FilterOptionsResponse> {
@@ -130,17 +149,16 @@ async function fetchInventoryApi(
   params: InventoryQueryParams,
   signal?: AbortSignal
 ): Promise<InventoryResponse> {
-  const qs = new URLSearchParams({
-    search: params.search,
-    status: params.status,
-    project: params.project.join(","),
-    jenis: params.jenis.join(","),
-    sortKey: params.sortKey ?? "",
-    sortDirection: params.sortDirection,
-    page: String(params.page),
-    pageSize: String(params.pageSize),
-  });
-  const res = await fetch(`/api/inventory?${qs.toString()}`, { signal });
+  const qs = new URLSearchParams();
+  if (params.jenis) qs.append("jenis", params.jenis);
+  if (params.status) qs.append("status", params.status);
+  if (params.proyek) qs.append("proyek", params.proyek);
+  if (params.search) qs.append("search", params.search);
+  if (params.sortBy) qs.append("sortBy", params.sortBy);
+  if (params.sortOrder) qs.append("sortOrder", params.sortOrder);
+  qs.append("page", String(params.page));
+  qs.append("limit", String(params.limit));
+  const res = await fetch(`/api/v1/items?${qs.toString()}`, { signal });
   if (!res.ok) throw new Error("Gagal mengambil data inventory");
   return (await res.json()) as InventoryResponse;
 }

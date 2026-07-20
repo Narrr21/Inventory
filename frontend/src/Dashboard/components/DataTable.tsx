@@ -79,7 +79,7 @@ const DataTable: React.FC<DataTableProps> = ({
                 onClick={() => isSortable && onSortChange(col)}
                 sx={{
                   width: col.width ?? DEFAULT_COLUMN_WIDTH,
-                  flex: `0 0 ${col.width ?? DEFAULT_COLUMN_WIDTH}%`,
+                  flex: `0 0 ${col.width ?? DEFAULT_COLUMN_WIDTH}px`,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -140,6 +140,7 @@ const DataTable: React.FC<DataTableProps> = ({
                 "&:last-of-type": { borderBottom: "none" },
                 "&:hover": { bgcolor: "action.hover" },
               }}
+              onClick={() => onEditClick(row._id)}
             >
               {columns.map((col) => {
                 const value = row[col.key as keyof BackendItem];
@@ -151,7 +152,7 @@ const DataTable: React.FC<DataTableProps> = ({
                     role="cell"
                     sx={{
                       width: col.width ?? DEFAULT_COLUMN_WIDTH,
-                      flex: `0 0 ${col.width ?? DEFAULT_COLUMN_WIDTH}%`,
+                      flex: `0 0 ${col.width ?? DEFAULT_COLUMN_WIDTH}px`,
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -176,13 +177,13 @@ const DataTable: React.FC<DataTableProps> = ({
                       <Box>
                         <IconButton
                           size="small"
-                          onClick={() => onEditClick(row.id)}
+                          onClick={() => onEditClick(row._id)}
                         >
                           <EditIcon fontSize="small" />
                         </IconButton>
                         <IconButton
                           size="small"
-                          onClick={() => onDeleteClick(row.id)}
+                          onClick={() => onDeleteClick(row._id)}
                           sx={{
                             color: "error.main",
                             transition: "all 0.2s ease-in-out",

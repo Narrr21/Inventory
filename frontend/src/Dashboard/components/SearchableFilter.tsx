@@ -2,10 +2,10 @@ import React, { useMemo, useState } from "react";
 import {
   Box,
   Button,
-  Checkbox,
   ListItemText,
   Menu,
   MenuItem,
+  Radio,
   TextField,
   Typography,
 } from "@mui/material";
@@ -15,8 +15,8 @@ import type { FilterOption } from "../../types/dashboard";
 interface SearchableFilterProps {
   label: string;
   options: FilterOption[];
-  selected: string[];
-  onChange: (values: string[]) => void;
+  selected: string;
+  onChange: (value: string) => void;
   maxVisible?: number;
 }
 
@@ -47,9 +47,7 @@ const SearchableFilter: React.FC<SearchableFilterProps> = ({
   };
 
   const toggleValue = (value: string) => {
-    const next = selected.includes(value)
-      ? selected.filter((v) => v !== value)
-      : [...selected, value];
+    const next = selected === value ? "" : value;
     onChange(next);
   };
 
@@ -62,8 +60,9 @@ const SearchableFilter: React.FC<SearchableFilterProps> = ({
         onClick={(e) => setAnchorEl(e.currentTarget)}
         sx={{ minWidth: 160, justifyContent: "space-between" }}
       >
-        {label}
-        {selected.length > 0 ? ` (${selected.length})` : ""}
+        {selected
+          ? options.find((opt) => opt.value === selected)?.label
+          : label}
       </Button>
       <Menu anchorEl={anchorEl} open={open} onClose={closeMenu}>
         <Box sx={{ px: 1.5, py: 1 }}>
@@ -91,10 +90,9 @@ const SearchableFilter: React.FC<SearchableFilterProps> = ({
                 onClick={() => toggleValue(opt.value)}
                 dense
               >
-                <Checkbox
-                  size="small"
-                  checked={selected.includes(opt.value)}
-                  sx={{ mr: 1 }}
+                <Radio
+                  checked={selected === opt.value}
+                  onChange={() => toggleValue(opt.value)}
                 />
                 <ListItemText primary={opt.label} />
               </MenuItem>
