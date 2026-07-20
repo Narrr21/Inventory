@@ -24,14 +24,6 @@ func NewItemHandler(repo *repository.ItemRepository, projectRepo *repository.Pro
 	return &ItemHandler{repo: repo, projectRepo: projectRepo}
 }
 
-func decodeBody(r *http.Request) map[string]interface{} {
-	var body map[string]interface{}
-	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&body)
-	}
-	return body
-}
-
 // knownItemFields are the top-level JSON keys the Item model declares.
 var knownItemFields = map[string]bool{
 	"jenis": true, "serialNumber": true, "nama": true, "idProyek": true,
@@ -79,7 +71,6 @@ func (h *ItemHandler) validate(ctx context.Context, item models.Item) map[string
 	required := map[string]string{
 		"jenis":        item.Jenis,
 		"serialNumber": item.SerialNumber,
-		"nama":         item.Nama,
 		"status":       item.Status,
 		"idProyek":     item.IdProyek,
 	}
@@ -101,7 +92,11 @@ func (h *ItemHandler) validate(ctx context.Context, item models.Item) map[string
 
 // CreateItem: POST /api/v1/items
 func (h *ItemHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
-	raw := decodeBody(r)
+	raw, err := decodeJSONObject(r)
+	if err != nil {
+		response.Err(w, http.StatusBadRequest, "MALFORMED_BODY", "Request body is not a valid JSON object", nil)
+		return
+	}
 	known, custom := splitCustomAttributes(raw)
 	if len(custom) > 0 {
 		known["customAttributes"] = custom
@@ -199,7 +194,11 @@ func (h *ItemHandler) GetItem(w http.ResponseWriter, r *http.Request) {
 // UpdateItem: PATCH /api/v1/items/{id}
 func (h *ItemHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	raw := decodeBody(r)
+	raw, err := decodeJSONObject(r)
+	if err != nil {
+		response.Err(w, http.StatusBadRequest, "MALFORMED_BODY", "Request body is not a valid JSON object", nil)
+		return
+	}
 	known, custom := splitCustomAttributes(raw)
 
 	existing, err := h.repo.GetByID(r.Context(), id)

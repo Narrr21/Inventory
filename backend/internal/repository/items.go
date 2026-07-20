@@ -91,6 +91,9 @@ func (r *ItemRepository) List(ctx context.Context, params ListParams) (ListResul
 	if limit < 1 {
 		limit = 20
 	}
+	if limit > 100 {
+		limit = 100
+	}
 
 	filter := bson.M{}
 	for _, field := range listFilterFields {
@@ -179,6 +182,101 @@ func (r *ItemRepository) List(ctx context.Context, params ListParams) (ListResul
 		Limit:      limit,
 		TotalPages: totalPages,
 	}, nil
+}
+
+// CompatListParams mirrors the frontend dashboard's InventoryQueryParams
+// (frontend/src/api/InventoryAPI.ts) — multi-select project/jenis filters
+// (OR within each, via caller-resolved idProyek values), free-text search
+// across nama/serialNumber, a single sort key/direction, and page/pageSize.
+// This is deliberately separate from ListParams/List: the compat layer's
+// filter semantics (multi-value OR) differ from /api/v1/items' single-value
+// equality filters, so reusing ListParams would misrepresent one or the
+// other.
+type CompatListParams struct {
+	Search     string
+	Status     string
+	ProjectIDs []string
+	Jenis      []string
+	SortBy     string
+	SortOrder  string
+	Page       int
+	PageSize   int
+}
+
+type CompatListResult struct {
+	Items []models.Item
+	Total int64
+}
+
+// compatSortFields maps the frontend dashboard's column keys to the real
+// stored field names.
+var compatSortFields = map[string]string{
+	"id":     "_id",
+	"name":   "nama",
+	"proyek": "idProyek",
+	"jenis":  "jenis",
+	"status": "status",
+}
+
+// ListCompat backs the /api/inventory compatibility endpoint.
+func (r *ItemRepository) ListCompat(ctx context.Context, params CompatListParams) (CompatListResult, error) {
+	filter := bson.M{}
+	if params.Status != "" {
+		filter["status"] = params.Status
+	}
+	if len(params.ProjectIDs) > 0 {
+		filter["idProyek"] = bson.M{"$in": params.ProjectIDs}
+	}
+	if len(params.Jenis) > 0 {
+		filter["jenis"] = bson.M{"$in": params.Jenis}
+	}
+	if params.Search != "" {
+		filter["$or"] = bson.A{
+			bson.M{"nama": bson.M{"$regex": params.Search, "$options": "i"}},
+			bson.M{"serialNumber": bson.M{"$regex": params.Search, "$options": "i"}},
+		}
+	}
+
+	total, err := r.coll.CountDocuments(ctx, filter)
+	if err != nil {
+		return CompatListResult{}, err
+	}
+
+	sortField, ok := compatSortFields[params.SortBy]
+	if !ok {
+		sortField = "createdAt"
+	}
+	sortOrder := -1
+	if params.SortOrder == "asc" {
+		sortOrder = 1
+	}
+
+	page := params.Page
+	if page < 1 {
+		page = 1
+	}
+	pageSize := params.PageSize
+	if pageSize < 1 {
+		pageSize = 10
+	}
+
+	findOpts := options.Find().
+		SetSort(bson.D{{Key: sortField, Value: sortOrder}}).
+		SetSkip(int64((page - 1) * pageSize)).
+		SetLimit(int64(pageSize))
+
+	cursor, err := r.coll.Find(ctx, filter, findOpts)
+	if err != nil {
+		return CompatListResult{}, err
+	}
+	defer cursor.Close(ctx)
+
+	items := make([]models.Item, 0, pageSize)
+	if err := cursor.All(ctx, &items); err != nil {
+		return CompatListResult{}, err
+	}
+
+	return CompatListResult{Items: items, Total: total}, nil
 }
 
 // GetByID returns a single item, or ErrNotFound.
