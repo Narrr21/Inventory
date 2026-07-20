@@ -1,15 +1,23 @@
 package handlers
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 )
 
-func NewRouter(items *ItemHandler, projects *ProjectHandler) chi.Router {
+func NewRouter(items *ItemHandler, projects *ProjectHandler, inventory *InventoryCompatHandler) chi.Router {
 	r := chi.NewRouter()
 	r.Use(middleware.Timeout(10 * time.Second))
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete, http.MethodOptions},
+		AllowedHeaders: []string{"Accept", "Content-Type"},
+		MaxAge:         300,
+	}))
 
 	r.Route("/api/v1/items", func(r chi.Router) {
 		r.Post("/", items.CreateItem)
@@ -27,6 +35,14 @@ func NewRouter(items *ItemHandler, projects *ProjectHandler) chi.Router {
 	r.Route("/api/v1/projects", func(r chi.Router) {
 		r.Post("/", projects.CreateProject)
 		r.Get("/", projects.ListProjects)
+		r.Get("/{id}", projects.GetProject)
+		r.Patch("/{id}", projects.UpdateProject)
+		r.Delete("/{id}", projects.DeleteProject)
+	})
+
+	r.Route("/api/inventory", func(r chi.Router) {
+		r.Get("/", inventory.List)
+		r.Get("/filter-options", inventory.FilterOptions)
 	})
 
 	return r
