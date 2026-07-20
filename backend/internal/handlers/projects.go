@@ -20,7 +20,6 @@ func NewProjectHandler(repo *repository.ProjectRepository) *ProjectHandler {
 	return &ProjectHandler{repo: repo}
 }
 
-
 func projectFromRaw(raw map[string]interface{}) models.Project {
 	var project models.Project
 	if v, ok := raw["namaProyek"].(string); ok {

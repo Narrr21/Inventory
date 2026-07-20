@@ -56,7 +56,11 @@ func setupBackendAPI(t *testing.T) string {
 
 	itemRepo := repository.NewItemRepository(client.Database)
 	projectRepo := repository.NewProjectRepository(client.Database)
-	router := handlers.NewRouter(handlers.NewItemHandler(itemRepo, projectRepo), handlers.NewProjectHandler(projectRepo))
+	router := handlers.NewRouter(
+		handlers.NewItemHandler(itemRepo, projectRepo),
+		handlers.NewProjectHandler(projectRepo),
+		handlers.NewInventoryCompatHandler(itemRepo, projectRepo),
+	)
 	server := httptest.NewServer(router)
 
 	t.Cleanup(func() {
