@@ -22,3 +22,18 @@ export interface FilterOption {
   /** label yang ditampilkan pada UI */
   label: string;
 }
+
+export interface BackendItem {
+  id: string;
+  name: string;
+  serial_number: string;
+  license_windows: string;
+  license_office: string;
+  status: string;
+  jenis: string;
+  proyek: string;
+  created_at?: string;
+  credentials?: Record<string, string>;
+  remote_info?: Record<string, string>;
+  other?: Record<string, string>;
+}

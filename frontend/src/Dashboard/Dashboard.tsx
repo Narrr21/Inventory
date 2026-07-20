@@ -13,42 +13,53 @@ import type {
   FilterOption,
   SortDirection,
 } from "../types/dashboard";
+import type { ItemFormData } from "../types/form";
 import MainLayout from "../layouts/MainLayout";
-import { ItemFormModal, type ItemFormData } from "../FormBarang/components/ItemFormModal";
+import { ItemFormModal } from "../FormBarang/components/ItemFormModal";
+import {
+  mapBackendToItemForm,
+  mapItemFormToBackend,
+} from "../api/ItemMapper";
 
 const PAGE_SIZE = 10;
 
 const EMPTY_FILTER_OPTIONS: FilterOptionsResponse = {
   project: [],
-  jenisBarang: [],
+  jenis: [],
 };
 
 const COLUMNS: ColumnDef[] = [
   {
+    label: "ID",
+    key: "id",
+    width: 10,
+  },
+  {
     label: "Nama Barang",
-    key: "namaBarang",
-    width: 400,
+    key: "name",
+    width: 30,
   },
   {
     label: "Project",
-    key: "project",
-    width: 300,
+    key: "proyek",
+    width: 20,
   },
   {
-    label: "Jenis Barang",
-    key: "jenisBarang",
-    width: 150,
+    label: "Jenis",
+    key: "jenis",
+    width: 15,
   },
   {
     label: "Status",
     key: "status",
-    width: 120,
+    width: 15,
   },
   {
-    label: "Qty",
-    key: "qty",
-    width: 100,
-  },
+    label: "Aksi",
+    key: "actions",
+    width: 10,
+    sortable: false,
+  }
 ];
 
 const STATUS_OPTIONS: FilterOption[] = [
@@ -74,7 +85,8 @@ const Dashboard: React.FC = () => {
   const [filterOptions, setFilterOptions] =
     useState<FilterOptionsResponse>(EMPTY_FILTER_OPTIONS);
   
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<ItemFormData | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -114,7 +126,7 @@ const Dashboard: React.FC = () => {
         search,
         status,
         project: projectSelected,
-        jenisBarang: jenisBarangSelected,
+        jenis: jenisBarangSelected,
         sortKey,
         sortDirection,
         page,
@@ -158,13 +170,48 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleCreateItemSubmit = (newData: ItemFormData) => {
-    console.log("Submit data baru ke Backend API:", newData);
-    
-    // Panggil API POST di sini, contoh:
-    // await createItemApi(newData);
-    
-    setIsAddModalOpen(false);
+  const handleAddClick = () => {
+    setSelectedItem(null);
+    setIsModalOpen(true);
+  };
+
+  const handleEditClick = (index: string) => {
+    const rawBackendData = data?.rows.find((item) => item.id === index);
+    if (!rawBackendData) return;
+
+    // Transformasi data backend lewat Inventory API & Mapper contoh:
+    const formattedData = mapBackendToItemForm(rawBackendData);
+    setSelectedItem(formattedData);
+
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteClick = (index: string) => {
+    if (confirm("Are you sure you want to delete item with id " + index + "?")) {
+      handleDelete(index);
+    }
+  };
+
+  const handleDelete = async (index: string) => {
+
+    // PROSES DELETE API
+    console.log("Item with ID:", index, "Deleted")
+  }
+
+  const handleSubmit = async (formData: ItemFormData) => {
+    const payload = mapItemFormToBackend(formData);
+
+    if (formData.id) {
+      // PROSES EDIT (PUT / PATCH API)
+      console.log("Update Item ID:", formData.id, payload);
+      // await updateItemApi(formData.id, payload);
+    } else {
+      // PROSES CREATE (POST API)
+      console.log("Create Item Baru:", payload);
+      // await createItemApi(payload);
+    }
+
+    setIsModalOpen(false);
   };
 
   const rows = data?.rows ?? [];
@@ -194,10 +241,10 @@ const Dashboard: React.FC = () => {
           projectOptions={filterOptions.project}
           projectSelected={projectSelected}
           onProjectChange={setProjectSelected}
-          jenisBarangOptions={filterOptions.jenisBarang}
-          jenisBarangSelected={jenisBarangSelected}
-          onJenisBarangChange={setJenisBarangSelected}
-          onAddItem={() => setIsAddModalOpen(true)}
+          jenisOptions={filterOptions.jenis}
+          jenisSelected={jenisBarangSelected}
+          onJenisChange={setJenisBarangSelected}
+          onAddItem={handleAddClick}
         />
 
         {error ? (
@@ -225,6 +272,8 @@ const Dashboard: React.FC = () => {
               sortDirection={sortDirection}
               onSortChange={handleSort}
               loading={loading}
+              onEditClick={handleEditClick}
+              onDeleteClick={handleDeleteClick}
             />
 
             {total > 0 && (
@@ -242,13 +291,14 @@ const Dashboard: React.FC = () => {
         )}
       </Box>
       <ItemFormModal
-        open={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onSubmit={handleCreateItemSubmit}
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleSubmit}
+        initialData={selectedItem || undefined}
         options={{
           status: STATUS_OPTIONS,
           proyek: filterOptions.project,
-          jenis: filterOptions.jenisBarang,
+          jenis: filterOptions.jenis,
         }}
       />
     </MainLayout>

@@ -1,5 +1,6 @@
 import React from "react";
-import { Box, Button, Typography } from "@mui/material";
+import { Box, IconButton } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
 import SearchBar from "./SearchBar";
 import StatusFilter, { type StatusOption } from "./StatusFilter";
 import SearchableFilter from "./SearchableFilter";
@@ -13,9 +14,9 @@ interface ControlRowProps {
   projectOptions: FilterOption[];
   projectSelected: string[];
   onProjectChange: (values: string[]) => void;
-  jenisBarangOptions: FilterOption[];
-  jenisBarangSelected: string[];
-  onJenisBarangChange: (values: string[]) => void;
+  jenisOptions: FilterOption[];
+  jenisSelected: string[];
+  onJenisChange: (values: string[]) => void;
   onAddItem: () => void;
 }
 
@@ -36,14 +37,21 @@ const ControlRow: React.FC<ControlRowProps> = (props) => {
       </Box>
 
       <Box sx={{ order: 1, display: "flex", flexWrap: "wrap", gap: 1.5 }}>
-        <Button
-          variant="outlined"
+        <IconButton
           onClick={props.onAddItem}
+          sx={{
+            border: "1px solid",
+            borderColor: "primary.main",
+            color: "primary.main",
+            transition: "all 0.2s ease-in-out",
+            "&:hover": {
+              bgcolor: "primary.light",
+              color: "primary.contrastText",
+            },
+          }}
         >
-          <Typography variant="button" sx={{ fontWeight: 600 }}>
-            Tambah Item
-          </Typography>
-        </Button>
+          <AddIcon />
+        </IconButton>
         <StatusFilter
           value={props.status}
           options={props.statusOptions}
@@ -57,9 +65,9 @@ const ControlRow: React.FC<ControlRowProps> = (props) => {
         />
         <SearchableFilter
           label="Jenis Barang"
-          options={props.jenisBarangOptions}
-          selected={props.jenisBarangSelected}
-          onChange={props.onJenisBarangChange}
+          options={props.jenisOptions}
+          selected={props.jenisSelected}
+          onChange={props.onJenisChange}
         />
       </Box>
     </Box>

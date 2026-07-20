@@ -2,7 +2,6 @@ import React, { useState, useMemo } from "react";
 import {
   AppBar,
   Toolbar,
-  Typography,
   Container,
   Box,
   Button,
@@ -13,6 +12,7 @@ import { ThemeProvider, createTheme } from "@mui/material/styles";
 import type { PaletteMode } from "@mui/material";
 import Brightness4Icon from "@mui/icons-material/Brightness4";
 import Brightness7Icon from "@mui/icons-material/Brightness7";
+import { Link, useLocation } from "react-router-dom"; // Import routing
 import { getDesignTokens } from "../ColorPalette";
 
 interface MainLayoutProps {
@@ -21,12 +21,17 @@ interface MainLayoutProps {
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const [mode, setMode] = useState<PaletteMode>("light");
+  const location = useLocation(); // Ambil lokasi URL saat ini
 
   const toggleColorMode = () => {
     setMode((prevMode) => (prevMode === "light" ? "dark" : "light"));
   };
 
   const theme = useMemo(() => createTheme(getDesignTokens(mode)), [mode]);
+
+  // Cek apakah halaman aktif adalah /dashboard
+  const isDashboardActive = location.pathname === "/dashboard";
+  const isAnalyticActive = location.pathname === "/analytic";
 
   return (
     <ThemeProvider theme={theme}>
@@ -51,28 +56,80 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             borderColor: "divider",
           }}
         >
-          <Toolbar>
-            <Typography
-              variant="h6"
-              component="div"
-              sx={{ flexGrow: 1, fontWeight: 600, color: "text.primary" }}
+          <Toolbar sx={{ justifyContent: "space-between" }}>
+            {/* Logo / Icon di sebelah kiri -> Tautkan ke '/' */}
+            <Box
+              component={Link}
+              to="/"
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                textDecoration: "none",
+                mr: 2,
+              }}
             >
-              Inventory App
-            </Typography>
+              <Box
+                component="img"
+                src="/favicon.svg"
+                alt="App Icon"
+                sx={{
+                  width: 32,
+                  height: 32,
+                  cursor: "pointer",
+                  transition: "transform 0.2s",
+                  "&:hover": {
+                    transform: "scale(1.05)",
+                  },
+                }}
+              />
+            </Box>
 
-            <Button sx={{ mr: 1, color: "text.primary" }}>Dashboard</Button>
-            <Button sx={{ mr: 1, color: "text.primary" }}>Items</Button>
+            {/* Menu Navigasi di sebelah kanan */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Button
+                component={Link}
+                to="/dashboard"
+                sx={{
+                  color: isDashboardActive
+                    ? "primary.contrastText"
+                    : "text.primary",
+                  bgcolor: isDashboardActive ? "primary.dark" : "transparent",
+                  fontWeight: isDashboardActive ? 600 : 400,
+                  "&:hover": isDashboardActive ? {} : {
+                    bgcolor: "action.hover",
+                  },
+                }}
+              >
+                Dashboard
+              </Button>
+              <Button
+                component={Link}
+                to="/"
+                sx={{
+                  color: isAnalyticActive
+                    ? "primary.contrastText"
+                    : "text.primary",
+                  bgcolor: isAnalyticActive ? "primary.dark" : "transparent",
+                  fontWeight: isAnalyticActive ? 600 : 500,
+                  "&:hover": isAnalyticActive ? {} : {
+                    bgcolor: "action.hover",
+                  },
+                }}
+              >
+                Analytic
+              </Button>
 
-            <IconButton
-              onClick={toggleColorMode}
-              color="inherit"
-              aria-label="toggle color mode"
-              sx={{ ml: 1 }}
-            >
-              {mode === "light" ? <Brightness4Icon /> : <Brightness7Icon />}
-            </IconButton>
+              <IconButton
+                onClick={toggleColorMode}
+                color="inherit"
+                aria-label="toggle color mode"
+              >
+                {mode === "light" ? <Brightness4Icon /> : <Brightness7Icon />}
+              </IconButton>
+            </Box>
           </Toolbar>
         </AppBar>
+
         {/* Main Content */}
         <Container
           component="main"

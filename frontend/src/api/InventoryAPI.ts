@@ -1,4 +1,4 @@
-import type { FilterOption, SortDirection } from "../types/dashboard";
+import type { FilterOption, SortDirection, BackendItem } from "../types/dashboard";
 
 const USE_MOCK = true;
 // Note: Dapat menghapus USE_MOCK dan logic MOCK dibawah jika backend selesai
@@ -7,23 +7,21 @@ export interface InventoryQueryParams {
   search: string;
   status: string;
   project: string[];
-  jenisBarang: string[];
+  jenis: string[];
   sortKey?: string;
   sortDirection: SortDirection;
   page: number;
   pageSize: number;
 }
 
-export type InventoryRow = Record<string, string | number>;
-
 export interface InventoryResponse {
-  rows: InventoryRow[];
+  rows: BackendItem[];
   total: number;
 }
 
 export interface FilterOptionsResponse {
   project: FilterOption[];
-  jenisBarang: FilterOption[];
+  jenis: FilterOption[];
 }
 
 // MOCK
@@ -46,12 +44,27 @@ const NAMA_POOL = [
   "Lemari Arsip Besi",
 ];
 
-const MOCK_DB: InventoryRow[] = Array.from({ length: 200 }, (_, i) => ({
-  namaBarang: `${NAMA_POOL[i % NAMA_POOL.length]} #${i + 1}`,
-  project: PROJECT_POOL[i % PROJECT_POOL.length],
-  jenisBarang: JENIS_POOL[i % JENIS_POOL.length],
+const MOCK_DB: BackendItem[] = Array.from({ length: 200 }, (_, i) => ({
+  id: `item-${i + 1}`,
+  name: NAMA_POOL[i % NAMA_POOL.length],
+  serial_number: `SN-${1000 + i}`,
+  license_windows: `WIN-${2000 + i}`,
+  license_office: `OFFICE-${3000 + i}`,
   status: STATUS_POOL[i % STATUS_POOL.length],
-  qty: (i * 7) % 40,
+  jenis: JENIS_POOL[i % JENIS_POOL.length],
+  proyek: PROJECT_POOL[i % PROJECT_POOL.length],
+  created_at: new Date(Date.now() - i * 1000 * 60 * 60 * 24).toISOString(),
+  credentials: {
+    username: `user${i + 1}`,
+    password: `pass${i + 1}`,
+  },
+  remote_info: {
+    ip_address: `192.168.1.${i + 1}`,
+    mac_address: `00:1A:2B:3C:4D:${(i + 1).toString(16).padStart(2, "0")}`,
+  },
+  other: {
+    notes: `Catatan untuk item ${i + 1}`,
+  },
 }));
 
 const NETWORK_DELAY_MS = 350;
@@ -72,19 +85,20 @@ async function fetchInventoryMock(
   let rows = MOCK_DB.filter((row) => {
     const matchesSearch =
       params.search === "" ||
-      String(row.namaBarang).toLowerCase().includes(params.search.toLowerCase());
+      String(row.name).toLowerCase().includes(params.search.toLowerCase());
     const matchesStatus = params.status === "" || row.status === params.status;
-    const matchesProject = params.project.length === 0 || params.project.includes(String(row.project));
+    const matchesProject = params.project.length === 0 || params.project.includes(String(row.proyek));
     const matchesJenis =
-      params.jenisBarang.length === 0 || params.jenisBarang.includes(String(row.jenisBarang));
+      params.jenis.length === 0 || params.jenis.includes(String(row.jenis));
     return matchesSearch && matchesStatus && matchesProject && matchesJenis;
   });
 
   if (params.sortKey) {
     const key = params.sortKey;
     rows = [...rows].sort((a, b) => {
-      const av = a[key];
-      const bv = b[key];
+      const av = String(a[key as keyof BackendItem] ?? "").toLowerCase();
+      const bv = String(b[key as keyof BackendItem] ?? "").toLowerCase();
+      if (av === "" && bv !== "") return params.sortDirection === "asc" ? 1 : -1;
       if (av === bv) return 0;
       const result = av > bv ? 1 : -1;
       return params.sortDirection === "asc" ? result : -result;
@@ -104,7 +118,7 @@ async function fetchFilterOptionsMock(signal?: AbortSignal): Promise<FilterOptio
   return simulateNetwork(
     {
       project: toOptions(PROJECT_POOL),
-      jenisBarang: toOptions(JENIS_POOL),
+      jenis: toOptions(JENIS_POOL),
     },
     signal
   );
@@ -120,7 +134,7 @@ async function fetchInventoryApi(
     search: params.search,
     status: params.status,
     project: params.project.join(","),
-    jenisBarang: params.jenisBarang.join(","),
+    jenis: params.jenis.join(","),
     sortKey: params.sortKey ?? "",
     sortDirection: params.sortDirection,
     page: String(params.page),

@@ -4,22 +4,8 @@ import { BaseForm } from "./BaseForm";
 import { BaseRow } from "./BaseRow";
 import { BaseDropdown } from "./BaseDropdown";
 import { BaseSection } from "./BaseSection";
-import type { FieldInfo } from "../../types/form";
+import type { FieldInfo, ItemFormData } from "../../types/form";
 import type { FilterOption } from "../../types/dashboard";
-
-export interface ItemFormData {
-  id?: string;
-  name: string;
-  serial_number: string;
-  license_windows: string;
-  license_office: string;
-  status: string;
-  jenis: string;
-  proyek: string;
-  credentials: FieldInfo[];
-  remote_info: FieldInfo[];
-  other: FieldInfo[];
-}
 
 interface ItemFormModalProps {
   open: boolean;

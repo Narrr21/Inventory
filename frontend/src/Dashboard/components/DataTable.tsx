@@ -1,17 +1,27 @@
 import React from "react";
-import { Box, LinearProgress, Tooltip, Typography } from "@mui/material";
+import {
+  Box,
+  LinearProgress,
+  Tooltip,
+  Typography,
+  IconButton,
+} from "@mui/material";
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import type { ColumnDef, SortDirection } from "../../types/dashboard";
-import type { InventoryRow } from "../../api/InventoryAPI";
+import type { BackendItem } from "../../types/dashboard";
 
 interface DataTableProps {
   columns: ColumnDef[];
-  rows: InventoryRow[];
+  rows: BackendItem[];
   sortKey?: string;
   sortDirection: SortDirection;
   onSortChange: (col: ColumnDef) => void;
   loading?: boolean;
+  onEditClick: (index: string) => void;
+  onDeleteClick: (index: string) => void;
 }
 
 const DEFAULT_COLUMN_WIDTH = 160;
@@ -24,6 +34,8 @@ const DataTable: React.FC<DataTableProps> = ({
   sortDirection,
   onSortChange,
   loading = false,
+  onEditClick,
+  onDeleteClick,
 }) => {
   return (
     <Box
@@ -67,7 +79,7 @@ const DataTable: React.FC<DataTableProps> = ({
                 onClick={() => isSortable && onSortChange(col)}
                 sx={{
                   width: col.width ?? DEFAULT_COLUMN_WIDTH,
-                  flex: `0 0 ${col.width ?? DEFAULT_COLUMN_WIDTH}px`,
+                  flex: `0 0 ${col.width ?? DEFAULT_COLUMN_WIDTH}%`,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -130,7 +142,7 @@ const DataTable: React.FC<DataTableProps> = ({
               }}
             >
               {columns.map((col) => {
-                const value = row[col.key];
+                const value = row[col.key as keyof BackendItem];
                 const text =
                   value === undefined || value === null ? "" : String(value);
                 return (
@@ -139,7 +151,7 @@ const DataTable: React.FC<DataTableProps> = ({
                     role="cell"
                     sx={{
                       width: col.width ?? DEFAULT_COLUMN_WIDTH,
-                      flex: `0 0 ${col.width ?? DEFAULT_COLUMN_WIDTH}px`,
+                      flex: `0 0 ${col.width ?? DEFAULT_COLUMN_WIDTH}%`,
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -160,6 +172,30 @@ const DataTable: React.FC<DataTableProps> = ({
                         {text}
                       </Typography>
                     </Tooltip>
+                    {onEditClick && col.key === "actions" && (
+                      <Box>
+                        <IconButton
+                          size="small"
+                          onClick={() => onEditClick(row.id)}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => onDeleteClick(row.id)}
+                          sx={{
+                            color: "error.main",
+                            transition: "all 0.2s ease-in-out",
+                            "&:hover": {
+                              bgcolor: "error.light",
+                              color: "error.contrastText",
+                            },
+                          }}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    )}
                   </Box>
                 );
               })}
