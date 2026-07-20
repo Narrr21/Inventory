@@ -1,24 +1,22 @@
 import React from "react";
-import { Box } from "@mui/material";
+import { Box, Button, Typography } from "@mui/material";
 import SearchBar from "./SearchBar";
 import StatusFilter, { type StatusOption } from "./StatusFilter";
 import SearchableFilter from "./SearchableFilter";
-import type { FilterOption } from "../types";
+import type { FilterOption } from "../../types/dashboard";
 
 interface ControlRowProps {
   onSearch: (query: string) => void;
   status: string;
   statusOptions: StatusOption[];
   onStatusChange: (value: string) => void;
-  lokasiOptions: FilterOption[];
-  lokasiSelected: string[];
-  onLokasiChange: (values: string[]) => void;
   projectOptions: FilterOption[];
   projectSelected: string[];
   onProjectChange: (values: string[]) => void;
   jenisBarangOptions: FilterOption[];
   jenisBarangSelected: string[];
   onJenisBarangChange: (values: string[]) => void;
+  onAddItem: () => void;
 }
 
 const ControlRow: React.FC<ControlRowProps> = (props) => {
@@ -38,16 +36,18 @@ const ControlRow: React.FC<ControlRowProps> = (props) => {
       </Box>
 
       <Box sx={{ order: 1, display: "flex", flexWrap: "wrap", gap: 1.5 }}>
+        <Button
+          variant="outlined"
+          onClick={props.onAddItem}
+        >
+          <Typography variant="button" sx={{ fontWeight: 600 }}>
+            Tambah Item
+          </Typography>
+        </Button>
         <StatusFilter
           value={props.status}
           options={props.statusOptions}
           onChange={props.onStatusChange}
-        />
-        <SearchableFilter
-          label="Lokasi"
-          options={props.lokasiOptions}
-          selected={props.lokasiSelected}
-          onChange={props.onLokasiChange}
         />
         <SearchableFilter
           label="Project"

@@ -7,14 +7,18 @@ import {
   fetchInventory,
   type FilterOptionsResponse,
   type InventoryResponse,
-} from "./InventoryAPI";
-import type { ColumnDef, FilterOption, SortDirection } from "./types";
+} from "../api/InventoryAPI";
+import type {
+  ColumnDef,
+  FilterOption,
+  SortDirection,
+} from "../types/dashboard";
 import MainLayout from "../layouts/MainLayout";
+import { ItemFormModal, type ItemFormData } from "../FormBarang/components/ItemFormModal";
 
 const PAGE_SIZE = 10;
 
 const EMPTY_FILTER_OPTIONS: FilterOptionsResponse = {
-  lokasi: [],
   project: [],
   jenisBarang: [],
 };
@@ -24,11 +28,6 @@ const COLUMNS: ColumnDef[] = [
     label: "Nama Barang",
     key: "namaBarang",
     width: 400,
-  },
-  {
-    label: "Lokasi",
-    key: "lokasi",
-    width: 200,
   },
   {
     label: "Project",
@@ -61,7 +60,6 @@ const STATUS_OPTIONS: FilterOption[] = [
 const Dashboard: React.FC = () => {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
-  const [lokasiSelected, setLokasiSelected] = useState<string[]>([]);
   const [projectSelected, setProjectSelected] = useState<string[]>([]);
   const [jenisBarangSelected, setJenisBarangSelected] = useState<string[]>([]);
   const [sortKey, setSortKey] = useState<string | undefined>(undefined);
@@ -75,6 +73,8 @@ const Dashboard: React.FC = () => {
 
   const [filterOptions, setFilterOptions] =
     useState<FilterOptionsResponse>(EMPTY_FILTER_OPTIONS);
+  
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -94,7 +94,6 @@ const Dashboard: React.FC = () => {
   }, [
     search,
     status,
-    lokasiSelected,
     projectSelected,
     jenisBarangSelected,
     sortKey,
@@ -114,7 +113,6 @@ const Dashboard: React.FC = () => {
       {
         search,
         status,
-        lokasi: lokasiSelected,
         project: projectSelected,
         jenisBarang: jenisBarangSelected,
         sortKey,
@@ -142,7 +140,6 @@ const Dashboard: React.FC = () => {
   }, [
     search,
     status,
-    lokasiSelected,
     projectSelected,
     jenisBarangSelected,
     sortKey,
@@ -159,6 +156,15 @@ const Dashboard: React.FC = () => {
       setSortKey(col.key);
       setSortDirection("asc");
     }
+  };
+
+  const handleCreateItemSubmit = (newData: ItemFormData) => {
+    console.log("Submit data baru ke Backend API:", newData);
+    
+    // Panggil API POST di sini, contoh:
+    // await createItemApi(newData);
+    
+    setIsAddModalOpen(false);
   };
 
   const rows = data?.rows ?? [];
@@ -185,15 +191,13 @@ const Dashboard: React.FC = () => {
           status={status}
           statusOptions={STATUS_OPTIONS}
           onStatusChange={setStatus}
-          lokasiOptions={filterOptions.lokasi}
-          lokasiSelected={lokasiSelected}
-          onLokasiChange={setLokasiSelected}
           projectOptions={filterOptions.project}
           projectSelected={projectSelected}
           onProjectChange={setProjectSelected}
           jenisBarangOptions={filterOptions.jenisBarang}
           jenisBarangSelected={jenisBarangSelected}
           onJenisBarangChange={setJenisBarangSelected}
+          onAddItem={() => setIsAddModalOpen(true)}
         />
 
         {error ? (
@@ -237,6 +241,16 @@ const Dashboard: React.FC = () => {
           </>
         )}
       </Box>
+      <ItemFormModal
+        open={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onSubmit={handleCreateItemSubmit}
+        options={{
+          status: STATUS_OPTIONS,
+          proyek: filterOptions.project,
+          jenis: filterOptions.jenisBarang,
+        }}
+      />
     </MainLayout>
   );
 };

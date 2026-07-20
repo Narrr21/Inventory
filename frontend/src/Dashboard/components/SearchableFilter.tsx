@@ -10,7 +10,7 @@ import {
   Typography,
 } from "@mui/material";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
-import type { FilterOption } from "../types";
+import type { FilterOption } from "../../types/dashboard";
 
 interface SearchableFilterProps {
   label: string;

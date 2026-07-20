@@ -1,4 +1,4 @@
-import type { FilterOption, SortDirection } from "./types";
+import type { FilterOption, SortDirection } from "../types/dashboard";
 
 const USE_MOCK = true;
 // Note: Dapat menghapus USE_MOCK dan logic MOCK dibawah jika backend selesai
@@ -6,7 +6,6 @@ const USE_MOCK = true;
 export interface InventoryQueryParams {
   search: string;
   status: string;
-  lokasi: string[];
   project: string[];
   jenisBarang: string[];
   sortKey?: string;
@@ -23,14 +22,12 @@ export interface InventoryResponse {
 }
 
 export interface FilterOptionsResponse {
-  lokasi: FilterOption[];
   project: FilterOption[];
   jenisBarang: FilterOption[];
 }
 
 // MOCK
 
-const LOKASI_POOL = ["Jakarta - Gudang A", "Bandung - Gudang B", "Surabaya - Gudang C", "Medan - Gudang D"];
 const PROJECT_POOL = ["Migrasi Sistem", "Renovasi Kantor", "Ruang Meeting", "Ekspansi Cabang"];
 const JENIS_POOL = ["Elektronik", "Furnitur", "Aksesoris", "Alat Tulis"];
 const STATUS_POOL = ["Healthy", "Under Maintenance", "Broken"];
@@ -51,7 +48,6 @@ const NAMA_POOL = [
 
 const MOCK_DB: InventoryRow[] = Array.from({ length: 200 }, (_, i) => ({
   namaBarang: `${NAMA_POOL[i % NAMA_POOL.length]} #${i + 1}`,
-  lokasi: LOKASI_POOL[i % LOKASI_POOL.length],
   project: PROJECT_POOL[i % PROJECT_POOL.length],
   jenisBarang: JENIS_POOL[i % JENIS_POOL.length],
   status: STATUS_POOL[i % STATUS_POOL.length],
@@ -78,11 +74,10 @@ async function fetchInventoryMock(
       params.search === "" ||
       String(row.namaBarang).toLowerCase().includes(params.search.toLowerCase());
     const matchesStatus = params.status === "" || row.status === params.status;
-    const matchesLokasi = params.lokasi.length === 0 || params.lokasi.includes(String(row.lokasi));
     const matchesProject = params.project.length === 0 || params.project.includes(String(row.project));
     const matchesJenis =
       params.jenisBarang.length === 0 || params.jenisBarang.includes(String(row.jenisBarang));
-    return matchesSearch && matchesStatus && matchesLokasi && matchesProject && matchesJenis;
+    return matchesSearch && matchesStatus && matchesProject && matchesJenis;
   });
 
   if (params.sortKey) {
@@ -108,7 +103,6 @@ async function fetchFilterOptionsMock(signal?: AbortSignal): Promise<FilterOptio
 
   return simulateNetwork(
     {
-      lokasi: toOptions(LOKASI_POOL),
       project: toOptions(PROJECT_POOL),
       jenisBarang: toOptions(JENIS_POOL),
     },
@@ -125,7 +119,6 @@ async function fetchInventoryApi(
   const qs = new URLSearchParams({
     search: params.search,
     status: params.status,
-    lokasi: params.lokasi.join(","),
     project: params.project.join(","),
     jenisBarang: params.jenisBarang.join(","),
     sortKey: params.sortKey ?? "",

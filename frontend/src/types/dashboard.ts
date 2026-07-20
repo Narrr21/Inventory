@@ -1,5 +1,3 @@
-// Tipe data bersama untuk Dashboard.
-
 export interface ColumnDef {
   /** key yang match dengan field pada setiap row */
   key: string;
@@ -19,6 +17,8 @@ export interface TableData {
 }
 
 export interface FilterOption {
+  /** value yang dikirim ke API */
   value: string;
+  /** label yang ditampilkan pada UI */
   label: string;
 }

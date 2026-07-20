@@ -2,8 +2,8 @@ import React from "react";
 import { Box, LinearProgress, Tooltip, Typography } from "@mui/material";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
-import type { ColumnDef, SortDirection } from "../types";
-import type { InventoryRow } from "../InventoryAPI";
+import type { ColumnDef, SortDirection } from "../../types/dashboard";
+import type { InventoryRow } from "../../api/InventoryAPI";
 
 interface DataTableProps {
   columns: ColumnDef[];
