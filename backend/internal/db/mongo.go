@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
@@ -51,10 +52,46 @@ func Connect(ctx context.Context, cfg Config) (*Client, error) {
 		return nil, fmt.Errorf("db: ping: %w", err)
 	}
 
+	database := client.Database(cfg.Database)
+
+	indexCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := ensureIndexes(indexCtx, database); err != nil {
+		_ = client.Disconnect(ctx)
+		return nil, fmt.Errorf("db: ensure indexes: %w", err)
+	}
+
 	return &Client{
 		Mongo:    client,
-		Database: client.Database(cfg.Database),
+		Database: database,
 	}, nil
+}
+
+// ensureIndexes creates the indexes needed by the items/projects query
+// patterns (filter/sort fields). Index creation is idempotent, so this is
+// safe to run on every connect.
+func ensureIndexes(ctx context.Context, database *mongo.Database) error {
+	itemIndexes := []string{"idProyek", "jenis", "status"}
+	itemModels := make([]mongo.IndexModel, 0, len(itemIndexes)+2)
+	for _, field := range itemIndexes {
+		itemModels = append(itemModels, mongo.IndexModel{Keys: bson.D{{Key: field, Value: 1}}})
+	}
+	itemModels = append(itemModels,
+		mongo.IndexModel{Keys: bson.D{{Key: "createdAt", Value: -1}}},
+		mongo.IndexModel{Keys: bson.D{{Key: "updatedAt", Value: -1}}},
+	)
+	if _, err := database.Collection("items").Indexes().CreateMany(ctx, itemModels); err != nil {
+		return err
+	}
+
+	projectModels := []mongo.IndexModel{
+		{Keys: bson.D{{Key: "namaProyek", Value: 1}}},
+	}
+	if _, err := database.Collection("projects").Indexes().CreateMany(ctx, projectModels); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Disconnect closes the MongoDB connection.
