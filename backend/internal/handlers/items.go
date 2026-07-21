@@ -283,7 +283,22 @@ func (h *ItemHandler) FilterOptions(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load filter options", nil)
 		return
 	}
-	response.OK(w, http.StatusOK, data, nil)
+
+	// Also include the full project list here, so a client populating the
+	// idProyek/namaProyek dropdown never needs a separate GET /projects
+	// round trip just for that — same data, same order (by namaProyek).
+	projects, err := h.projectRepo.List(r.Context())
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load filter options", nil)
+		return
+	}
+
+	result := map[string]interface{}{
+		"jenis":   data["jenis"],
+		"status":  data["status"],
+		"project": projects,
+	}
+	response.OK(w, http.StatusOK, result, nil)
 }
 
 func (h *ItemHandler) distinctFieldValues(w http.ResponseWriter, r *http.Request, field string) {

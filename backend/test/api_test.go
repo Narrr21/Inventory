@@ -591,6 +591,20 @@ func TestFilterOptionsAndStats(t *testing.T) {
 		if len(jenis) != 2 {
 			t.Errorf("jenis = %v, want 2 distinct values", jenis)
 		}
+
+		// project must carry full Project objects (_id + namaProyek + lokasi)
+		// so a client never needs a separate GET /projects call just to
+		// populate an idProyek/namaProyek dropdown.
+		projects := data["project"].([]interface{})
+		if len(projects) != 2 {
+			t.Fatalf("project = %v, want 2 entries (one per auto-created project)", projects)
+		}
+		first := projects[0].(map[string]interface{})
+		for _, field := range []string{"_id", "namaProyek", "lokasi"} {
+			if _, ok := first[field]; !ok {
+				t.Errorf("project entry missing %q: %+v", field, first)
+			}
+		}
 	})
 
 	t.Run("FilterOptionsJenis", func(t *testing.T) {
