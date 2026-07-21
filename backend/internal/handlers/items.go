@@ -24,6 +24,12 @@ func NewItemHandler(repo *repository.ItemRepository, projectRepo *repository.Pro
 	return &ItemHandler{repo: repo, projectRepo: projectRepo}
 }
 
+// noSuchProjectSentinel is used as the idProyek filter value when a
+// namaProyek query param doesn't resolve to any project — guaranteed to
+// never match a real item, since real idProyek values are always 24-char
+// Mongo ObjectId hex strings.
+const noSuchProjectSentinel = "__no_such_project__"
+
 // knownItemFields are the top-level JSON keys the Item model declares.
 var knownItemFields = map[string]bool{
 	"jenis": true, "serialNumber": true, "nama": true, "idProyek": true,
@@ -146,6 +152,24 @@ func (h *ItemHandler) ListItems(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// namaProyek is an alternate way to filter by project — resolved to
+	// idProyek server-side, since that's what's actually stored on Item. A
+	// literal idProyek param always takes precedence if both are sent.
+	if namaProyek := q.Get("namaProyek"); namaProyek != "" && filters["idProyek"] == "" {
+		project, err := h.projectRepo.GetByName(r.Context(), namaProyek)
+		switch {
+		case errors.Is(err, repository.ErrNotFound):
+			// No such project — zero results, not an error, consistent with
+			// how an unmatched idProyek or customAttributes filter behaves.
+			filters["idProyek"] = noSuchProjectSentinel
+		case err != nil:
+			response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to resolve namaProyek", nil)
+			return
+		default:
+			filters["idProyek"] = project.ID
+		}
+	}
+
 	result, err := h.repo.List(r.Context(), repository.ListParams{
 		Page:      page,
 		Limit:     limit,
@@ -259,7 +283,22 @@ func (h *ItemHandler) FilterOptions(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load filter options", nil)
 		return
 	}
-	response.OK(w, http.StatusOK, data, nil)
+
+	// Also include the full project list here, so a client populating the
+	// idProyek/namaProyek dropdown never needs a separate GET /projects
+	// round trip just for that — same data, same order (by namaProyek).
+	projects, err := h.projectRepo.List(r.Context())
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load filter options", nil)
+		return
+	}
+
+	result := map[string]interface{}{
+		"jenis":   data["jenis"],
+		"status":  data["status"],
+		"project": projects,
+	}
+	response.OK(w, http.StatusOK, result, nil)
 }
 
 func (h *ItemHandler) distinctFieldValues(w http.ResponseWriter, r *http.Request, field string) {
