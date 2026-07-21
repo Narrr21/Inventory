@@ -2,21 +2,20 @@ import React, { useMemo, useState } from "react";
 import {
   Box,
   Button,
-  Checkbox,
   ListItemText,
   Menu,
   MenuItem,
+  Radio,
   TextField,
   Typography,
 } from "@mui/material";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
-import type { FilterOption } from "../types";
 
 interface SearchableFilterProps {
   label: string;
-  options: FilterOption[];
-  selected: string[];
-  onChange: (values: string[]) => void;
+  options: string[];
+  selected: string;
+  onChange: (value: string) => void;
   maxVisible?: number;
 }
 
@@ -34,7 +33,7 @@ const SearchableFilter: React.FC<SearchableFilterProps> = ({
   const filtered = useMemo(
     () =>
       options.filter((opt) =>
-        opt.label.toLowerCase().includes(query.toLowerCase()),
+        opt.toLowerCase().includes(query.toLowerCase()),
       ),
     [options, query],
   );
@@ -47,9 +46,7 @@ const SearchableFilter: React.FC<SearchableFilterProps> = ({
   };
 
   const toggleValue = (value: string) => {
-    const next = selected.includes(value)
-      ? selected.filter((v) => v !== value)
-      : [...selected, value];
+    const next = selected === value ? "" : value;
     onChange(next);
   };
 
@@ -62,8 +59,9 @@ const SearchableFilter: React.FC<SearchableFilterProps> = ({
         onClick={(e) => setAnchorEl(e.currentTarget)}
         sx={{ minWidth: 160, justifyContent: "space-between" }}
       >
-        {label}
-        {selected.length > 0 ? ` (${selected.length})` : ""}
+        {selected
+          ? options.find((opt) => opt === selected)
+          : label}
       </Button>
       <Menu anchorEl={anchorEl} open={open} onClose={closeMenu}>
         <Box sx={{ px: 1.5, py: 1 }}>
@@ -87,16 +85,15 @@ const SearchableFilter: React.FC<SearchableFilterProps> = ({
           ) : (
             visible.map((opt) => (
               <MenuItem
-                key={opt.value}
-                onClick={() => toggleValue(opt.value)}
+                key={opt}
+                onClick={() => toggleValue(opt)}
                 dense
               >
-                <Checkbox
-                  size="small"
-                  checked={selected.includes(opt.value)}
-                  sx={{ mr: 1 }}
+                <Radio
+                  checked={selected === opt}
+                  onChange={() => toggleValue(opt)}
                 />
-                <ListItemText primary={opt.label} />
+                <ListItemText primary={opt} />
               </MenuItem>
             ))
           )}
