@@ -24,6 +24,12 @@ func NewItemHandler(repo *repository.ItemRepository, projectRepo *repository.Pro
 	return &ItemHandler{repo: repo, projectRepo: projectRepo}
 }
 
+// noSuchProjectSentinel is used as the idProyek filter value when a
+// namaProyek query param doesn't resolve to any project — guaranteed to
+// never match a real item, since real idProyek values are always 24-char
+// Mongo ObjectId hex strings.
+const noSuchProjectSentinel = "__no_such_project__"
+
 // knownItemFields are the top-level JSON keys the Item model declares.
 var knownItemFields = map[string]bool{
 	"jenis": true, "serialNumber": true, "nama": true, "idProyek": true,
@@ -143,6 +149,24 @@ func (h *ItemHandler) ListItems(w http.ResponseWriter, r *http.Request) {
 	for key, values := range q {
 		if strings.HasPrefix(key, "customAttributes.") && len(values) > 0 && values[0] != "" {
 			filters[key] = values[0]
+		}
+	}
+
+	// namaProyek is an alternate way to filter by project — resolved to
+	// idProyek server-side, since that's what's actually stored on Item. A
+	// literal idProyek param always takes precedence if both are sent.
+	if namaProyek := q.Get("namaProyek"); namaProyek != "" && filters["idProyek"] == "" {
+		project, err := h.projectRepo.GetByName(r.Context(), namaProyek)
+		switch {
+		case errors.Is(err, repository.ErrNotFound):
+			// No such project — zero results, not an error, consistent with
+			// how an unmatched idProyek or customAttributes filter behaves.
+			filters["idProyek"] = noSuchProjectSentinel
+		case err != nil:
+			response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to resolve namaProyek", nil)
+			return
+		default:
+			filters["idProyek"] = project.ID
 		}
 	}
 

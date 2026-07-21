@@ -457,6 +457,48 @@ func TestListFilterSearchSortPagination(t *testing.T) {
 		}
 	})
 
+	t.Run("FilterByNamaProyek", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items?namaProyek="+projectA["namaProyek"].(string), nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].([]interface{})
+		if len(data) != 2 {
+			t.Fatalf("len(data) = %d, want 2", len(data))
+		}
+	})
+
+	t.Run("FilterByNamaProyekUnknownReturnsEmpty", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items?namaProyek=NoSuchProject", nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].([]interface{})
+		if len(data) != 0 {
+			t.Errorf("data = %v, want empty", data)
+		}
+		meta := env["meta"].(map[string]interface{})
+		if meta["total"].(float64) != 0 {
+			t.Errorf("meta.total = %v, want 0", meta["total"])
+		}
+	})
+
+	t.Run("FilterByIdProyekTakesPrecedenceOverNamaProyek", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodGet,
+			"/api/v1/items?idProyek="+projectB["_id"].(string)+"&namaProyek="+projectA["namaProyek"].(string), nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].([]interface{})
+		if len(data) != 1 {
+			t.Fatalf("len(data) = %d, want 1 (projectB's single item)", len(data))
+		}
+		first := data[0].(map[string]interface{})
+		if first["idProyek"] != projectB["_id"] {
+			t.Errorf("idProyek = %v, want %v (literal idProyek should win)", first["idProyek"], projectB["_id"])
+		}
+	})
+
 	t.Run("Search", func(t *testing.T) {
 		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items?q=BBB", nil)
 		if status != http.StatusOK {
