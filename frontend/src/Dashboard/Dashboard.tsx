@@ -10,7 +10,6 @@ import {
 } from "../api/InventoryAPI";
 import type {
   ColumnDef,
-  FilterOption,
   SortDirection,
 } from "../types/dashboard";
 import type { ItemFormData } from "../types/form";
@@ -24,8 +23,12 @@ import {
 const PAGE_SIZE = 10;
 
 const EMPTY_FILTER_OPTIONS: FilterOptionsResponse = {
-  project: [],
-  jenis: [],
+  success: true,
+  data: {
+    project: [],
+    jenis: [],
+    status: [],
+  },
 };
 
 const COLUMNS: ColumnDef[] = [
@@ -67,12 +70,6 @@ const COLUMNS: ColumnDef[] = [
   }
 ];
 
-const STATUS_OPTIONS: FilterOption[] = [
-  { label: "Healthy", value: "Healthy" },
-  { label: "Under Maintenance", value: "Under Maintenance" },
-  { label: "Broken", value: "Broken" },
-];
-
 const Dashboard: React.FC = () => {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -88,7 +85,6 @@ const Dashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [filterOptions, setFilterOptions] = useState<FilterOptionsResponse>(EMPTY_FILTER_OPTIONS);
-    useState<FilterOptionsResponse>(EMPTY_FILTER_OPTIONS);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ItemFormData | null>(null);
@@ -96,7 +92,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     const controller = new AbortController();
     fetchFilterOptions(controller.signal)
-      .then(setFilterOptions)
+      .then((response) => setFilterOptions(response))
       .catch((err) => {
         // gagal memuat opsi filter bukan error fatal untuk seluruh halaman,
         // dropdown filter akan tampil kosong tapi tabel tetap bisa dipakai
@@ -241,12 +237,12 @@ const Dashboard: React.FC = () => {
         <ControlRow
           onSearch={setSearch}
           status={status}
-          statusOptions={STATUS_OPTIONS}
+          statusOptions={filterOptions.data.status}
           onStatusChange={setStatus}
-          projectOptions={filterOptions.project}
+          projectOptions={filterOptions.data.project}
           projectSelected={project}
           onProjectChange={setProject}
-          jenisOptions={filterOptions.jenis}
+          jenisOptions={filterOptions.data.jenis}
           jenisSelected={jenis}
           onJenisChange={setJenis}
           onAddItem={handleAddClick}
@@ -301,9 +297,9 @@ const Dashboard: React.FC = () => {
         onSubmit={handleSubmit}
         initialData={selectedItem || undefined}
         options={{
-          status: STATUS_OPTIONS,
-          proyek: filterOptions.project,
-          jenis: filterOptions.jenis,
+          status: filterOptions.data.status,
+          proyek: filterOptions.data.project,
+          jenis: filterOptions.data.jenis,
         }}
       />
     </MainLayout>

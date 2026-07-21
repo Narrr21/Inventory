@@ -1,6 +1,6 @@
-import type { FilterOption, SortDirection, BackendItem } from "../types/dashboard";
+import type { SortDirection, BackendItem, Project } from "../types/dashboard";
 
-const USE_MOCK = true;
+const USE_MOCK = false;
 // Note: Dapat menghapus USE_MOCK dan logic MOCK dibawah jika backend selesai
 
 export interface InventoryQueryParams {
@@ -26,8 +26,17 @@ export interface InventoryResponse {
 }
 
 export interface FilterOptionsResponse {
-  project: FilterOption[];
-  jenis: FilterOption[];
+  success: boolean;
+  data: {
+    project: string[];
+    jenis: string[];
+    status: string[];
+  };
+}
+
+export interface ListOfProjectsResponse {
+  success: boolean;
+  data: Project[];
 }
 
 // MOCK
@@ -132,12 +141,14 @@ async function fetchInventoryMock(
 }
 
 async function fetchFilterOptionsMock(signal?: AbortSignal): Promise<FilterOptionsResponse> {
-  const toOptions = (values: string[]): FilterOption[] => values.map((v) => ({ value: v, label: v }));
-
   return simulateNetwork(
     {
-      project: toOptions(PROJECT_POOL),
-      jenis: toOptions(JENIS_POOL),
+      success: true,
+      data: {
+        project: PROJECT_POOL,
+        jenis: JENIS_POOL,
+        status: STATUS_POOL,
+      },
     },
     signal
   );
@@ -164,9 +175,15 @@ async function fetchInventoryApi(
 }
 
 async function fetchFilterOptionsApi(signal?: AbortSignal): Promise<FilterOptionsResponse> {
-  const res = await fetch("/api/inventory/filter-options", { signal });
+  const res = await fetch("/api/v1/items/filter-options", { signal });
   if (!res.ok) throw new Error("Gagal mengambil opsi filter");
   return (await res.json()) as FilterOptionsResponse;
+}
+
+async function fetchListOfProjects(signal?: AbortSignal): Promise<ListOfProjectsResponse> {
+  const res = await fetch("/api/v1/projects", { signal });
+  if (!res.ok) throw new Error("Gagal mengambil opsi proyek");
+  return (await res.json()) as ListOfProjectsResponse;
 }
 
 // EXPORT

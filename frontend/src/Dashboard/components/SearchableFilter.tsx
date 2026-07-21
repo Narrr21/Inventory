@@ -10,11 +10,10 @@ import {
   Typography,
 } from "@mui/material";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
-import type { FilterOption } from "../../types/dashboard";
 
 interface SearchableFilterProps {
   label: string;
-  options: FilterOption[];
+  options: string[];
   selected: string;
   onChange: (value: string) => void;
   maxVisible?: number;
@@ -34,7 +33,7 @@ const SearchableFilter: React.FC<SearchableFilterProps> = ({
   const filtered = useMemo(
     () =>
       options.filter((opt) =>
-        opt.label.toLowerCase().includes(query.toLowerCase()),
+        opt.toLowerCase().includes(query.toLowerCase()),
       ),
     [options, query],
   );
@@ -61,7 +60,7 @@ const SearchableFilter: React.FC<SearchableFilterProps> = ({
         sx={{ minWidth: 160, justifyContent: "space-between" }}
       >
         {selected
-          ? options.find((opt) => opt.value === selected)?.label
+          ? options.find((opt) => opt === selected)
           : label}
       </Button>
       <Menu anchorEl={anchorEl} open={open} onClose={closeMenu}>
@@ -86,15 +85,15 @@ const SearchableFilter: React.FC<SearchableFilterProps> = ({
           ) : (
             visible.map((opt) => (
               <MenuItem
-                key={opt.value}
-                onClick={() => toggleValue(opt.value)}
+                key={opt}
+                onClick={() => toggleValue(opt)}
                 dense
               >
                 <Radio
-                  checked={selected === opt.value}
-                  onChange={() => toggleValue(opt.value)}
+                  checked={selected === opt}
+                  onChange={() => toggleValue(opt)}
                 />
-                <ListItemText primary={opt.label} />
+                <ListItemText primary={opt} />
               </MenuItem>
             ))
           )}

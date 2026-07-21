@@ -2,19 +2,18 @@ import React from "react";
 import { Box, IconButton } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import SearchBar from "./SearchBar";
-import StatusFilter, { type StatusOption } from "./StatusFilter";
+import StatusFilter from "./StatusFilter";
 import SearchableFilter from "./SearchableFilter";
-import type { FilterOption } from "../../types/dashboard";
 
 interface ControlRowProps {
   onSearch: (query: string) => void;
   status: string;
-  statusOptions: StatusOption[];
+  statusOptions: string[];
   onStatusChange: (value: string) => void;
-  projectOptions: FilterOption[];
+  projectOptions: string[];
   projectSelected: string;
   onProjectChange: (value: string) => void;
-  jenisOptions: FilterOption[];
+  jenisOptions: string[];
   jenisSelected: string;
   onJenisChange: (value: string) => void;
   onAddItem: () => void;

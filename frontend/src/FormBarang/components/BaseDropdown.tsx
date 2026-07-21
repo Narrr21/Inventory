@@ -1,11 +1,10 @@
 import React from "react";
 import { FormControl, InputLabel, Select, MenuItem, FormHelperText, type SelectChangeEvent } from "@mui/material";
-import type { FilterOption } from "../../types/dashboard";
 
 interface BaseDropdownProps {
   label: string;
   value: string;
-  options: FilterOption[];
+  options: string[];
   onChange: (value: string) => void;
   error?: boolean;
   helperText?: string;
@@ -37,8 +36,8 @@ export const BaseDropdown: React.FC<BaseDropdownProps> = ({
         onChange={handleChange}
       >
         {options.map((opt) => (
-          <MenuItem key={opt.value} value={opt.value}>
-            {opt.label}
+          <MenuItem key={opt} value={opt}>
+            {opt}
           </MenuItem>
         ))}
       </Select>

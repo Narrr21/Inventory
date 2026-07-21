@@ -39,3 +39,9 @@ export interface BackendItem {
   created_at: string;
   updated_at: string;
 }
+
+export interface Project {
+  _id: string;
+  namaProyek: string;
+  lokasi: string;
+}

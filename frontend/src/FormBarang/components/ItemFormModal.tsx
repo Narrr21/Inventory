@@ -5,7 +5,6 @@ import { BaseRow } from "./BaseRow";
 import { BaseDropdown } from "./BaseDropdown";
 import { BaseSection } from "./BaseSection";
 import type { FieldInfo, ItemFormData } from "../../types/form";
-import type { FilterOption } from "../../types/dashboard";
 
 interface ItemFormModalProps {
   open: boolean;
@@ -13,9 +12,9 @@ interface ItemFormModalProps {
   onSubmit: (data: ItemFormData) => void;
   initialData?: ItemFormData | null; // Untuk Edit Item
   options: {
-    status: FilterOption[];
-    jenis: FilterOption[];
-    proyek: FilterOption[];
+    status: string[];
+    jenis: string[];
+    proyek: string[];
   };
 }
 
