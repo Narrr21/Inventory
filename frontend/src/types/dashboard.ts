@@ -28,6 +28,7 @@ export interface BackendItem {
   jenis: string;
   serialNumber: string;
   nama: string;
+  idProyek: string;
   namaProyek: string;
   credentials?: Record<string, string>;
   remote_info?: Record<string, string>;

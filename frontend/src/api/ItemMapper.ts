@@ -3,7 +3,7 @@
 import type { ItemFormData } from "../types/form";
 import type { FieldInfo } from "../types/form";
 import type { BackendItem } from "../types/dashboard";
-import type { CreateItemRequest } from "./CRUDitems";
+import type { CreateItemRequest, UpdateItemRequest } from "./CRUDitems";
 
 // Helper konversi objek { [key]: value } dari backend ke FieldInfo[]
 const mapObjectToFields = (obj?: Record<string, string>): FieldInfo[] => {
@@ -43,6 +43,7 @@ export const mapBackendToItemForm = (item: BackendItem): ItemFormData => {
     remote_info: mapObjectToFields(item.remote_info),
     customAttributes: mapObjectToFields(item.customAttributes),
     deskripsi: item.deskripsi || "",
+    idProyek: item.idProyek || "",
   };
 };
 
@@ -56,6 +57,7 @@ export const mapItemFormToBackend = (formData: ItemFormData): BackendItem => {
     license_office: formData.license_office,
     status: formData.status,
     jenis: formData.jenis,
+    idProyek: formData.idProyek,
     namaProyek: formData.proyek,
     credentials: mapFieldsToObject(formData.credentials),
     remote_info: mapFieldsToObject(formData.remote_info),
@@ -66,6 +68,22 @@ export const mapItemFormToBackend = (formData: ItemFormData): BackendItem => {
 };
 
 export const mapItemFormToCreateRequest = (formData: ItemFormData): CreateItemRequest => {
+  return {
+    jenis: formData.jenis,
+    serialNumber: formData.serial_number,
+    nama: formData.name,
+    idProyek: formData.idProyek,
+    status: formData.status,
+    licenseWindows: formData.license_windows,
+    licenseOffice: formData.license_office,
+    deskripsi: formData.deskripsi,
+    credentials: mapFieldsToObject(formData.credentials),
+    remoteInfo: mapFieldsToObject(formData.remote_info),
+    customAttributes: mapFieldsToObject(formData.customAttributes),
+  };
+}
+
+export const mapItemFormToUpdateRequest = (formData: ItemFormData): Partial<UpdateItemRequest> => {
   return {
     jenis: formData.jenis,
     serialNumber: formData.serial_number,

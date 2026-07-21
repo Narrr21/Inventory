@@ -20,8 +20,8 @@ interface DataTableProps {
   sortDirection: SortDirection;
   onSortChange: (col: ColumnDef) => void;
   loading?: boolean;
-  onEditClick: (index: string) => void;
-  onDeleteClick: (index: string) => void;
+  onEditClick: (id: string) => void;
+  onDeleteClick: (id: string) => void;
 }
 
 const DEFAULT_COLUMN_WIDTH = 160;
@@ -56,7 +56,7 @@ const DataTable: React.FC<DataTableProps> = ({
         {loading && <LinearProgress sx={{ height: 2 }} />}
       </Box>
       <Box sx={{ minWidth: "max-content", width: "100%" }}>
-        {/* AttributeRow */}
+        {/* AttributeRow / Table Header */}
         <Box
           role="row"
           sx={{
@@ -120,7 +120,7 @@ const DataTable: React.FC<DataTableProps> = ({
           })}
         </Box>
 
-        {/* TableRow */}
+        {/* Table Body / Rows */}
         <Box
           sx={{
             display: "flex",
@@ -129,23 +129,77 @@ const DataTable: React.FC<DataTableProps> = ({
             transition: "opacity 150ms",
           }}
         >
-          {rows.map((row, idx) => (
+          {rows.map((row) => (
             <Box
-              key={idx}
+              key={row._id} // Menggunakan _id unik daripada indeks array
               role="row"
               sx={{
                 display: "flex",
                 borderBottom: "1px solid",
                 borderColor: "divider",
+                cursor: "pointer",
                 "&:last-of-type": { borderBottom: "none" },
                 "&:hover": { bgcolor: "action.hover" },
               }}
               onClick={() => onEditClick(row._id)}
             >
               {columns.map((col) => {
+                // KELOLA KOLOM ACTIONS KECUALI
+                if (col.key === "actions") {
+                  return (
+                    <Box
+                      key={col.key}
+                      role="cell"
+                      onClick={(e) => e.stopPropagation()} // Mencegah pemicu row onClick
+                      sx={{
+                        width: col.width ?? DEFAULT_COLUMN_WIDTH,
+                        flex: `0 0 ${col.width ?? DEFAULT_COLUMN_WIDTH}px`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        py: 1,
+                        px: 1,
+                      }}
+                    >
+                      <IconButton
+                        size="small"
+                        aria-label="edit item"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.currentTarget.blur(); // Lepas fokus dari tombol sebelum modal terbuka
+                          onEditClick(row._id);
+                        }}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        aria-label="delete item"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.currentTarget.blur(); // Lepas fokus dari tombol sebelum modal delete/konfirmasi terbuka
+                          onDeleteClick(row._id);
+                        }}
+                        sx={{
+                          color: "error.main",
+                          transition: "all 0.2s ease-in-out",
+                          "&:hover": {
+                            bgcolor: "error.light",
+                            color: "error.contrastText",
+                          },
+                        }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  );
+                }
+
+                // KOLOM REGULER (DATA)
                 const value = row[col.key as keyof BackendItem];
                 const text =
                   value === undefined || value === null ? "" : String(value);
+
                 return (
                   <Box
                     key={col.key}
@@ -173,35 +227,12 @@ const DataTable: React.FC<DataTableProps> = ({
                         {text}
                       </Typography>
                     </Tooltip>
-                    {onEditClick && col.key === "actions" && (
-                      <Box>
-                        <IconButton
-                          size="small"
-                          onClick={() => onEditClick(row._id)}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => onDeleteClick(row._id)}
-                          sx={{
-                            color: "error.main",
-                            transition: "all 0.2s ease-in-out",
-                            "&:hover": {
-                              bgcolor: "error.light",
-                              color: "error.contrastText",
-                            },
-                          }}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Box>
-                    )}
                   </Box>
                 );
               })}
             </Box>
           ))}
+
           {!loading && rows.length === 0 && (
             <Box sx={{ py: 4, textAlign: "center" }}>
               <Typography variant="body2" color="text.secondary">

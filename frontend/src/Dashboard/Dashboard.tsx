@@ -8,7 +8,7 @@ import {
   type FilterOptionsResponse,
   type InventoryResponse,
 } from "../api/InventoryAPI";
-import { createItem } from "../api/CRUDitems";
+import { createItem, updateItem } from "../api/CRUDitems";
 import type { ColumnDef, SortDirection } from "../types/dashboard";
 import type { ItemFormData } from "../types/form";
 import MainLayout from "../layouts/MainLayout";
@@ -16,6 +16,7 @@ import { ItemFormModal } from "../FormBarang/components/ItemFormModal";
 import {
   mapBackendToItemForm,
   mapItemFormToCreateRequest,
+  mapItemFormToUpdateRequest,
 } from "../api/ItemMapper";
 
 const PAGE_SIZE = 10;
@@ -194,8 +195,16 @@ const Dashboard: React.FC = () => {
 
   const handleSubmit = async (formData: ItemFormData) => {
     if (formData.id) {
-      const payload = mapItemFormToCreateRequest(formData);
-      console.log("Update Item ID:", formData.id, payload);
+      const payload = mapItemFormToUpdateRequest(formData);
+      updateItem(formData.id, payload)
+        .then((res) => {
+          console.log("Item Updated:", res);
+          setReloadToken((t) => t + 1);
+        })
+        .catch((err) => {
+          console.error("Failed to update item:", err);
+          alert("Gagal memperbarui item. Silakan coba lagi.");
+        });
     } else {
       const payload = mapItemFormToCreateRequest(formData);
       createItem(payload)

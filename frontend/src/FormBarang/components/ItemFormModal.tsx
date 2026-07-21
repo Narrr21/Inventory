@@ -21,7 +21,7 @@ interface ItemFormModalProps {
 
 const projectNames = (projects: Project[]): string[] => {
   return projects.map((project) => project.namaProyek);
-}
+};
 
 const DEFAULT_FORM: ItemFormData = {
   name: "",
@@ -35,6 +35,7 @@ const DEFAULT_FORM: ItemFormData = {
   remote_info: [],
   customAttributes: [],
   deskripsi: "",
+  idProyek: "",
 };
 
 export const ItemFormModal: React.FC<ItemFormModalProps> = ({
@@ -56,6 +57,20 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
     }
   }, [initialData, open]);
 
+  useEffect(() => {
+    if (formData.proyek) {
+      const matchedProject = options.proyek.find(
+        (p) => p.namaProyek === formData.proyek,
+      );
+      const matchedId = matchedProject ? matchedProject._id : "";
+
+      // Mencegah re-render loop
+      if (formData.idProyek !== matchedId) {
+        setFormData((prev) => ({ ...prev, idProyek: matchedId }));
+      }
+    }
+  }, [formData.proyek, options.proyek]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit(formData);
@@ -65,17 +80,19 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
   const handleSectionFieldChange = (
     sectionKey: "credentials" | "remote_info" | "customAttributes",
     fieldId: string,
-    updated: Partial<FieldInfo>
+    updated: Partial<FieldInfo>,
   ) => {
     setFormData((prev) => ({
       ...prev,
       [sectionKey]: prev[sectionKey].map((item) =>
-        item.id === fieldId ? { ...item, ...updated } : item
+        item.id === fieldId ? { ...item, ...updated } : item,
       ),
     }));
   };
 
-  const handleAddSectionField = (sectionKey: "credentials" | "remote_info" | "customAttributes") => {
+  const handleAddSectionField = (
+    sectionKey: "credentials" | "remote_info" | "customAttributes",
+  ) => {
     const newField: FieldInfo = {
       id: Date.now().toString(),
       label: "Label Baru",
@@ -113,12 +130,16 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
         <BaseRow
           label="License Windows"
           value={formData.license_windows}
-          onChange={(val) => setFormData((p) => ({ ...p, license_windows: val }))}
+          onChange={(val) =>
+            setFormData((p) => ({ ...p, license_windows: val }))
+          }
         />
         <BaseRow
           label="License Office"
           value={formData.license_office}
-          onChange={(val) => setFormData((p) => ({ ...p, license_office: val }))}
+          onChange={(val) =>
+            setFormData((p) => ({ ...p, license_office: val }))
+          }
         />
       </Box>
 
@@ -154,21 +175,27 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
       <BaseSection
         label="Credentials"
         fields={formData.credentials}
-        onChangeField={(id, updated) => handleSectionFieldChange("credentials", id, updated)}
+        onChangeField={(id, updated) =>
+          handleSectionFieldChange("credentials", id, updated)
+        }
         onAddField={() => handleAddSectionField("credentials")}
       />
 
       <BaseSection
         label="Remote Info"
         fields={formData.remote_info}
-        onChangeField={(id, updated) => handleSectionFieldChange("remote_info", id, updated)}
+        onChangeField={(id, updated) =>
+          handleSectionFieldChange("remote_info", id, updated)
+        }
         onAddField={() => handleAddSectionField("remote_info")}
       />
 
       <BaseSection
         label="Custom Attributes"
         fields={formData.customAttributes}
-        onChangeField={(id, updated) => handleSectionFieldChange("customAttributes", id, updated)}
+        onChangeField={(id, updated) =>
+          handleSectionFieldChange("customAttributes", id, updated)
+        }
         onAddField={() => handleAddSectionField("customAttributes")}
       />
     </BaseForm>

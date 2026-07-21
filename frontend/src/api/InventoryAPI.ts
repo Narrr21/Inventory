@@ -72,6 +72,7 @@ const MOCK_DB: BackendItem[] = Array.from({ length: 200 }, (_, i) => ({
   license_office: `OFFICE-${3000 + i}`,
   status: STATUS_POOL[i % STATUS_POOL.length],
   jenis: JENIS_POOL[i % JENIS_POOL.length],
+  idProyek: `project-${(i % PROJECT_POOL.length) + 1}`,
   namaProyek: PROJECT_POOL[i % PROJECT_POOL.length],
   created_at: new Date(Date.now() - i * 1000 * 60 * 60 * 24).toISOString(),
   updated_at: new Date(Date.now() - i * 1000 * 60 * 60 * 24).toISOString(),
