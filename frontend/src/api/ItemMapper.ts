@@ -3,6 +3,7 @@
 import type { ItemFormData } from "../types/form";
 import type { FieldInfo } from "../types/form";
 import type { BackendItem } from "../types/dashboard";
+import type { CreateItemRequest } from "./CRUDitems";
 
 // Helper konversi objek { [key]: value } dari backend ke FieldInfo[]
 const mapObjectToFields = (obj?: Record<string, string>): FieldInfo[] => {
@@ -37,10 +38,11 @@ export const mapBackendToItemForm = (item: BackendItem): ItemFormData => {
     license_office: item.license_office || "",
     status: item.status || "",
     jenis: item.jenis || "",
-    proyek: item.idProyek || "",
+    proyek: item.namaProyek || "",
     credentials: mapObjectToFields(item.credentials),
     remote_info: mapObjectToFields(item.remote_info),
     customAttributes: mapObjectToFields(item.customAttributes),
+    deskripsi: item.deskripsi || "",
   };
 };
 
@@ -54,7 +56,7 @@ export const mapItemFormToBackend = (formData: ItemFormData): BackendItem => {
     license_office: formData.license_office,
     status: formData.status,
     jenis: formData.jenis,
-    idProyek: formData.proyek,
+    namaProyek: formData.proyek,
     credentials: mapFieldsToObject(formData.credentials),
     remote_info: mapFieldsToObject(formData.remote_info),
     customAttributes: mapFieldsToObject(formData.customAttributes),
@@ -62,3 +64,19 @@ export const mapItemFormToBackend = (formData: ItemFormData): BackendItem => {
     updated_at: "", // Placeholder, backend will handle this
   };
 };
+
+export const mapItemFormToCreateRequest = (formData: ItemFormData): CreateItemRequest => {
+  return {
+    jenis: formData.jenis,
+    serialNumber: formData.serial_number,
+    nama: formData.name,
+    idProyek: formData.idProyek,
+    status: formData.status,
+    licenseWindows: formData.license_windows,
+    licenseOffice: formData.license_office,
+    deskripsi: formData.deskripsi,
+    credentials: mapFieldsToObject(formData.credentials),
+    remoteInfo: mapFieldsToObject(formData.remote_info),
+    customAttributes: mapFieldsToObject(formData.customAttributes),
+  };
+}

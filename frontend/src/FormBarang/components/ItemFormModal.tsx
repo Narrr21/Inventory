@@ -5,6 +5,7 @@ import { BaseRow } from "./BaseRow";
 import { BaseDropdown } from "./BaseDropdown";
 import { BaseSection } from "./BaseSection";
 import type { FieldInfo, ItemFormData } from "../../types/form";
+import type { Project } from "../../types/dashboard";
 
 interface ItemFormModalProps {
   open: boolean;
@@ -14,8 +15,12 @@ interface ItemFormModalProps {
   options: {
     status: string[];
     jenis: string[];
-    proyek: string[];
+    proyek: Project[];
   };
+}
+
+const projectNames = (projects: Project[]): string[] => {
+  return projects.map((project) => project.namaProyek);
 }
 
 const DEFAULT_FORM: ItemFormData = {
@@ -29,6 +34,7 @@ const DEFAULT_FORM: ItemFormData = {
   credentials: [],
   remote_info: [],
   customAttributes: [],
+  deskripsi: "",
 };
 
 export const ItemFormModal: React.FC<ItemFormModalProps> = ({
@@ -138,7 +144,7 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
           <BaseDropdown
             label="Proyek"
             value={formData.proyek}
-            options={options.proyek}
+            options={projectNames(options.proyek)}
             onChange={(val) => setFormData((p) => ({ ...p, proyek: val }))}
           />
         </Box>

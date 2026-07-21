@@ -4,19 +4,24 @@ import AddIcon from "@mui/icons-material/Add";
 import SearchBar from "./SearchBar";
 import StatusFilter from "./StatusFilter";
 import SearchableFilter from "./SearchableFilter";
+import type { Project } from "../../types/dashboard"
 
 interface ControlRowProps {
   onSearch: (query: string) => void;
   status: string;
   statusOptions: string[];
   onStatusChange: (value: string) => void;
-  projectOptions: string[];
+  projectOptions: Project[];
   projectSelected: string;
   onProjectChange: (value: string) => void;
   jenisOptions: string[];
   jenisSelected: string;
   onJenisChange: (value: string) => void;
   onAddItem: () => void;
+}
+
+const projectNames = (projects: Project[]): string[] => {
+  return projects.map((project) => project.namaProyek);
 }
 
 const ControlRow: React.FC<ControlRowProps> = (props) => {
@@ -58,7 +63,7 @@ const ControlRow: React.FC<ControlRowProps> = (props) => {
         />
         <SearchableFilter
           label="Project"
-          options={props.projectOptions}
+          options={projectNames(props.projectOptions)}
           selected={props.projectSelected}
           onChange={props.onProjectChange}
         />

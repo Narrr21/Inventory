@@ -8,16 +8,14 @@ import {
   type FilterOptionsResponse,
   type InventoryResponse,
 } from "../api/InventoryAPI";
-import type {
-  ColumnDef,
-  SortDirection,
-} from "../types/dashboard";
+import { createItem } from "../api/CRUDitems";
+import type { ColumnDef, SortDirection } from "../types/dashboard";
 import type { ItemFormData } from "../types/form";
 import MainLayout from "../layouts/MainLayout";
 import { ItemFormModal } from "../FormBarang/components/ItemFormModal";
 import {
   mapBackendToItemForm,
-  mapItemFormToBackend,
+  mapItemFormToCreateRequest,
 } from "../api/ItemMapper";
 
 const PAGE_SIZE = 10;
@@ -49,7 +47,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Project",
-    key: "idProyek",
+    key: "namaProyek",
     width: 150,
   },
   {
@@ -67,7 +65,7 @@ const COLUMNS: ColumnDef[] = [
     key: "actions",
     width: 100,
     sortable: false,
-  }
+  },
 ];
 
 const Dashboard: React.FC = () => {
@@ -84,8 +82,9 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [filterOptions, setFilterOptions] = useState<FilterOptionsResponse>(EMPTY_FILTER_OPTIONS);
-  
+  const [filterOptions, setFilterOptions] =
+    useState<FilterOptionsResponse>(EMPTY_FILTER_OPTIONS);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ItemFormData | null>(null);
 
@@ -104,14 +103,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    search,
-    status,
-    project,
-    jenis,
-    sortKey,
-    sortDirection,
-  ]);
+  }, [search, status, project, jenis, sortKey, sortDirection]);
 
   const requestIdRef = useRef(0);
 
@@ -188,30 +180,34 @@ const Dashboard: React.FC = () => {
   };
 
   const handleDeleteClick = (index: string) => {
-    if (confirm("Are you sure you want to delete item with id " + index + "?")) {
+    if (
+      confirm("Are you sure you want to delete item with id " + index + "?")
+    ) {
       handleDelete(index);
     }
   };
 
   const handleDelete = async (index: string) => {
-
     // PROSES DELETE API
-    console.log("Item with ID:", index, "Deleted")
-  }
+    console.log("Item with ID:", index, "Deleted");
+  };
 
   const handleSubmit = async (formData: ItemFormData) => {
-    const payload = mapItemFormToBackend(formData);
-
     if (formData.id) {
-      // PROSES EDIT (PUT / PATCH API)
+      const payload = mapItemFormToCreateRequest(formData);
       console.log("Update Item ID:", formData.id, payload);
-      // await updateItemApi(formData.id, payload);
     } else {
-      // PROSES CREATE (POST API)
-      console.log("Create Item Baru:", payload);
-      // await createItemApi(payload);
+      const payload = mapItemFormToCreateRequest(formData);
+      createItem(payload)
+        .then((res) => {
+          console.log("Item Created:", res);
+          setReloadToken((t) => t + 1);
+        })
+        .catch((err) => {
+          console.error("Failed to create item:", err);
+          alert("Gagal membuat item baru. Silakan coba lagi.");
+        });
     }
-
     setIsModalOpen(false);
   };
 

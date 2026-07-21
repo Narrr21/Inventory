@@ -20,7 +20,9 @@ export interface ItemFormData {
   status: string;
   jenis: string;
   proyek: string;
+  idProyek?: string;
   credentials: FieldInfo[];
   remote_info: FieldInfo[];
   customAttributes: FieldInfo[];
+  deskripsi: string;
 }

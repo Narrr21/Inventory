@@ -28,7 +28,7 @@ export interface InventoryResponse {
 export interface FilterOptionsResponse {
   success: boolean;
   data: {
-    project: string[];
+    project: Project[];
     jenis: string[];
     status: string[];
   };
@@ -41,7 +41,12 @@ export interface ListOfProjectsResponse {
 
 // MOCK
 
-const PROJECT_POOL = ["Migrasi Sistem", "Renovasi Kantor", "Ruang Meeting", "Ekspansi Cabang"];
+const PROJECT_POOL = [
+  "Migrasi Sistem",
+  "Renovasi Kantor",
+  "Ruang Meeting",
+  "Ekspansi Cabang",
+];
 const JENIS_POOL = ["Elektronik", "Furnitur", "Aksesoris", "Alat Tulis"];
 const STATUS_POOL = ["Healthy", "Under Maintenance", "Broken"];
 const NAMA_POOL = [
@@ -67,7 +72,7 @@ const MOCK_DB: BackendItem[] = Array.from({ length: 200 }, (_, i) => ({
   license_office: `OFFICE-${3000 + i}`,
   status: STATUS_POOL[i % STATUS_POOL.length],
   jenis: JENIS_POOL[i % JENIS_POOL.length],
-  idProyek: PROJECT_POOL[i % PROJECT_POOL.length],
+  namaProyek: PROJECT_POOL[i % PROJECT_POOL.length],
   created_at: new Date(Date.now() - i * 1000 * 60 * 60 * 24).toISOString(),
   updated_at: new Date(Date.now() - i * 1000 * 60 * 60 * 24).toISOString(),
   credentials: {
@@ -85,7 +90,7 @@ const MOCK_DB: BackendItem[] = Array.from({ length: 200 }, (_, i) => ({
 
 const NETWORK_DELAY_MS = 350;
 
-const simulateNetwork = <T,>(value: T, signal?: AbortSignal): Promise<T> =>
+const simulateNetwork = <T>(value: T, signal?: AbortSignal): Promise<T> =>
   new Promise((resolve, reject) => {
     const timer = setTimeout(() => resolve(value), NETWORK_DELAY_MS);
     signal?.addEventListener("abort", () => {
@@ -96,16 +101,19 @@ const simulateNetwork = <T,>(value: T, signal?: AbortSignal): Promise<T> =>
 
 async function fetchInventoryMock(
   params: InventoryQueryParams,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<InventoryResponse> {
   let rows = MOCK_DB.filter((row) => {
     const matchesSearch =
-      params.search === "" || row.nama.toLowerCase().includes(params.search?.toLowerCase() ?? "") ||
-      row.serialNumber.toLowerCase().includes(params.search?.toLowerCase() ?? "");
+      params.search === "" ||
+      row.nama.toLowerCase().includes(params.search?.toLowerCase() ?? "") ||
+      row.serialNumber
+        .toLowerCase()
+        .includes(params.search?.toLowerCase() ?? "");
     const matchesStatus = params.status === "" || row.status === params.status;
-    const matchesProject = params.proyek === "" || row.idProyek === params.proyek;
-    const matchesJenis =
-      params.jenis === "" || row.jenis === params.jenis;
+    const matchesProject =
+      params.proyek === "" || row.namaProyek === params.proyek;
+    const matchesJenis = params.jenis === "" || row.jenis === params.jenis;
     return matchesSearch && matchesStatus && matchesProject && matchesJenis;
   });
 
@@ -136,21 +144,27 @@ async function fetchInventoryMock(
         totalPages: Math.ceil(total / params.limit),
       },
     },
-    signal
+    signal,
   );
 }
 
-async function fetchFilterOptionsMock(signal?: AbortSignal): Promise<FilterOptionsResponse> {
+async function fetchFilterOptionsMock(
+  signal?: AbortSignal,
+): Promise<FilterOptionsResponse> {
   return simulateNetwork(
     {
       success: true,
       data: {
-        project: PROJECT_POOL,
+        project: PROJECT_POOL.map((namaProyek, index) => ({
+          _id: `project-${index + 1}`,
+          namaProyek,
+          lokasi: `Lokasi ${index + 1}`,
+        })),
         jenis: JENIS_POOL,
         status: STATUS_POOL,
       },
     },
-    signal
+    signal,
   );
 }
 
@@ -158,7 +172,7 @@ async function fetchFilterOptionsMock(signal?: AbortSignal): Promise<FilterOptio
 
 async function fetchInventoryApi(
   params: InventoryQueryParams,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<InventoryResponse> {
   const qs = new URLSearchParams();
   if (params.jenis) qs.append("jenis", params.jenis);
@@ -174,13 +188,17 @@ async function fetchInventoryApi(
   return (await res.json()) as InventoryResponse;
 }
 
-async function fetchFilterOptionsApi(signal?: AbortSignal): Promise<FilterOptionsResponse> {
+async function fetchFilterOptionsApi(
+  signal?: AbortSignal,
+): Promise<FilterOptionsResponse> {
   const res = await fetch("/api/v1/items/filter-options", { signal });
   if (!res.ok) throw new Error("Gagal mengambil opsi filter");
   return (await res.json()) as FilterOptionsResponse;
 }
 
-async function fetchListOfProjects(signal?: AbortSignal): Promise<ListOfProjectsResponse> {
+async function fetchListOfProjects(
+  signal?: AbortSignal,
+): Promise<ListOfProjectsResponse> {
   const res = await fetch("/api/v1/projects", { signal });
   if (!res.ok) throw new Error("Gagal mengambil opsi proyek");
   return (await res.json()) as ListOfProjectsResponse;
@@ -190,7 +208,7 @@ async function fetchListOfProjects(signal?: AbortSignal): Promise<ListOfProjects
 
 export async function fetchInventory(
   params: InventoryQueryParams,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<InventoryResponse> {
   if (USE_MOCK) {
     return fetchInventoryMock(params, signal);
@@ -198,7 +216,9 @@ export async function fetchInventory(
   return fetchInventoryApi(params, signal);
 }
 
-export async function fetchFilterOptions(signal?: AbortSignal): Promise<FilterOptionsResponse> {
+export async function fetchFilterOptions(
+  signal?: AbortSignal,
+): Promise<FilterOptionsResponse> {
   if (USE_MOCK) {
     return fetchFilterOptionsMock(signal);
   }
