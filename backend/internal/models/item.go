@@ -31,10 +31,11 @@ type Item struct {
 	SerialNumber string `bson:"serialNumber" json:"serialNumber"`
 	Nama         string `bson:"nama" json:"nama"`
 	IdProyek     string `bson:"idProyek" json:"idProyek"`
-	// ProjectName is never stored — it's the referenced Project's namaProyek,
-	// resolved and set by the handler at response time, so it can't go stale
-	// independently of the Project document and needs no migration.
-	ProjectName      string                 `bson:"-" json:"projectName,omitempty"`
+	// NamaProyek is never stored — it's the referenced Project's own
+	// namaProyek, resolved and set by the handler at response time, so it
+	// can't go stale independently of the Project document and needs no
+	// migration.
+	NamaProyek       string                 `bson:"-" json:"namaProyek,omitempty"`
 	Credentials      Credentials            `bson:"credentials" json:"credentials"`
 	RemoteInfo       RemoteInfo             `bson:"remoteInfo" json:"remoteInfo"`
 	LicenseWindows   string                 `bson:"licenseWindows" json:"licenseWindows"`
@@ -52,7 +53,7 @@ type ItemPublic struct {
 	SerialNumber     string                 `json:"serialNumber"`
 	Nama             string                 `json:"nama"`
 	IdProyek         string                 `json:"idProyek"`
-	ProjectName      string                 `json:"projectName,omitempty"`
+	NamaProyek       string                 `json:"namaProyek,omitempty"`
 	Credentials      CredentialsPublic      `json:"credentials"`
 	RemoteInfo       RemoteInfoPublic       `json:"remoteInfo"`
 	LicenseWindows   string                 `json:"licenseWindows"`
@@ -71,7 +72,7 @@ func (i Item) Public() ItemPublic {
 		SerialNumber: i.SerialNumber,
 		Nama:         i.Nama,
 		IdProyek:     i.IdProyek,
-		ProjectName:  i.ProjectName,
+		NamaProyek:   i.NamaProyek,
 		Credentials:  CredentialsPublic{Account: i.Credentials.Account},
 		RemoteInfo: RemoteInfoPublic{
 			IPAddress: i.RemoteInfo.IPAddress,

@@ -55,7 +55,7 @@ func splitCustomAttributes(raw map[string]interface{}) (known map[string]interfa
 	}
 
 	for k, v := range raw {
-		if k == "customAttributes" || k == "_id" || k == "projectName" {
+		if k == "customAttributes" || k == "_id" || k == "namaProyek" {
 			continue
 		}
 		if knownItemFields[k] {
@@ -68,12 +68,12 @@ func splitCustomAttributes(raw map[string]interface{}) (known map[string]interfa
 	return known, custom
 }
 
-// buildProjectNameIndex fetches every project once and returns a lookup
+// buildNamaProyekIndex fetches every project once and returns a lookup
 // from idProyek -> namaProyek, used to denormalize a project's display name
 // onto Item responses without a per-item round trip. A lookup failure is
-// swallowed (empty index) rather than failing the whole request — projectName
+// swallowed (empty index) rather than failing the whole request — namaProyek
 // is a convenience field, not load-bearing.
-func buildProjectNameIndex(ctx context.Context, projects *repository.ProjectRepository) map[string]string {
+func buildNamaProyekIndex(ctx context.Context, projects *repository.ProjectRepository) map[string]string {
 	list, err := projects.List(ctx)
 	if err != nil {
 		return map[string]string{}
@@ -85,9 +85,9 @@ func buildProjectNameIndex(ctx context.Context, projects *repository.ProjectRepo
 	return index
 }
 
-// resolveProjectName looks up a single project's name for one item. Like
-// buildProjectNameIndex, a lookup failure just leaves the name empty.
-func (h *ItemHandler) resolveProjectName(ctx context.Context, idProyek string) string {
+// resolveNamaProyek looks up a single project's name for one item. Like
+// buildNamaProyekIndex, a lookup failure just leaves the name empty.
+func (h *ItemHandler) resolveNamaProyek(ctx context.Context, idProyek string) string {
 	project, err := h.projectRepo.GetByID(ctx, idProyek)
 	if err != nil {
 		return ""
@@ -149,7 +149,7 @@ func (h *ItemHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create item", nil)
 		return
 	}
-	created.ProjectName = h.resolveProjectName(r.Context(), created.IdProyek)
+	created.NamaProyek = h.resolveNamaProyek(r.Context(), created.IdProyek)
 	response.OK(w, http.StatusCreated, created, nil)
 }
 
@@ -215,10 +215,10 @@ func (h *ItemHandler) ListItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	projectNames := buildProjectNameIndex(r.Context(), h.projectRepo)
+	namaProyekByID := buildNamaProyekIndex(r.Context(), h.projectRepo)
 	items := make([]models.ItemPublic, 0, len(result.Items))
 	for _, it := range result.Items {
-		it.ProjectName = projectNames[it.IdProyek]
+		it.NamaProyek = namaProyekByID[it.IdProyek]
 		items = append(items, it.Public())
 	}
 	meta := map[string]interface{}{
@@ -242,7 +242,7 @@ func (h *ItemHandler) GetItem(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get item", nil)
 		return
 	}
-	item.ProjectName = h.resolveProjectName(r.Context(), item.IdProyek)
+	item.NamaProyek = h.resolveNamaProyek(r.Context(), item.IdProyek)
 	response.OK(w, http.StatusOK, item, nil)
 }
 
@@ -289,7 +289,7 @@ func (h *ItemHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update item", nil)
 		return
 	}
-	item.ProjectName = h.resolveProjectName(r.Context(), item.IdProyek)
+	item.NamaProyek = h.resolveNamaProyek(r.Context(), item.IdProyek)
 	response.OK(w, http.StatusOK, item, nil)
 }
 
@@ -377,10 +377,10 @@ func (h *ItemHandler) Stats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	projectNames := buildProjectNameIndex(ctx, h.projectRepo)
+	namaProyekByID := buildNamaProyekIndex(ctx, h.projectRepo)
 	recentPublic := make([]models.ItemPublic, 0, len(recent))
 	for _, it := range recent {
-		it.ProjectName = projectNames[it.IdProyek]
+		it.NamaProyek = namaProyekByID[it.IdProyek]
 		recentPublic = append(recentPublic, it.Public())
 	}
 
