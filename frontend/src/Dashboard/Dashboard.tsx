@@ -8,7 +8,7 @@ import {
   type FilterOptionsResponse,
   type InventoryResponse,
 } from "../api/InventoryAPI";
-import { createItem, updateItem } from "../api/CRUDitems";
+import { createItem, updateItem, deleteItemAPI } from "../api/CRUDitems";
 import type { ColumnDef, SortDirection } from "../types/dashboard";
 import type { ItemFormData } from "../types/form";
 import MainLayout from "../layouts/MainLayout";
@@ -189,8 +189,14 @@ const Dashboard: React.FC = () => {
   };
 
   const handleDelete = async (index: string) => {
-    // PROSES DELETE API
-    console.log("Item with ID:", index, "Deleted");
+    deleteItemAPI(index)
+      .then(() => {
+        setReloadToken((t) => t + 1);
+      })
+      .catch((err) => {
+        console.error("Failed to delete item:", err);
+        alert("Gagal menghapus item. Silakan coba lagi.");
+      });
   };
 
   const handleSubmit = async (formData: ItemFormData) => {

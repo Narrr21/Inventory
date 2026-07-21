@@ -178,8 +178,8 @@ async function fetchInventoryApi(
   const qs = new URLSearchParams();
   if (params.jenis) qs.append("jenis", params.jenis);
   if (params.status) qs.append("status", params.status);
-  if (params.proyek) qs.append("proyek", params.proyek);
-  if (params.search) qs.append("search", params.search);
+  if (params.proyek) qs.append("namaProyek", params.proyek);
+  if (params.search) qs.append("q", params.search);
   if (params.sortBy) qs.append("sortBy", params.sortBy);
   if (params.sortOrder) qs.append("sortOrder", params.sortOrder);
   qs.append("page", String(params.page));

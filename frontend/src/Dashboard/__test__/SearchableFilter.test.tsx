@@ -7,28 +7,23 @@ import userEvent from "@testing-library/user-event";
 import SearchableFilter from "../components/SearchableFilter";
 import { describe, expect, it, vi } from "vitest";
 
-interface FilterOption {
-  value: string;
-  label: string;
-}
-
 describe("SearchableFilter Component", () => {
-  const mockOptions: FilterOption[] = [
-    { value: "1", label: "Kategori A" },
-    { value: "2", label: "Kategori B" },
-    { value: "3", label: "Kategori C" },
-    { value: "4", label: "Kategori D" },
-    { value: "5", label: "Kategori E" },
-    { value: "6", label: "Kategori F" }, // Opsi tambahan untuk menguji maxVisible
+  const mockOptions: string[] = [
+    "Kategori A",
+    "Kategori B",
+    "Kategori C",
+    "Kategori D",
+    "Kategori E",
+    "Kategori F", // Opsi tambahan untuk menguji maxVisible
   ];
 
-  it("harus merender tombol filter dengan jumlah selected yang sesuai", () => {
+  it("harus merender tombol filter dengan label saat belum ada yang dipilih", () => {
     // Render komponen dengan kondisi awal selected kosong
     const { rerender } = render(
       <SearchableFilter
         label="Kategori"
         options={mockOptions}
-        selected={[]}
+        selected=""
         onChange={() => {}}
       />,
     );
@@ -43,14 +38,14 @@ describe("SearchableFilter Component", () => {
       <SearchableFilter
         label="Kategori"
         options={mockOptions}
-        selected={["1", "2"]}
+        selected="Kategori A"
         onChange={() => {}}
       />,
     );
 
-    // Pastikan tombol filter menampilkan jumlah selected yang benar
+    // Pastikan tombol filter menampilkan opsi yang dipilih
     expect(
-      screen.getByRole("button", { name: /kategori \(2\)/i }),
+      screen.getByRole("button", { name: "Kategori A" }),
     ).toBeInTheDocument();
   });
 
@@ -62,7 +57,7 @@ describe("SearchableFilter Component", () => {
       <SearchableFilter
         label="Kategori"
         options={mockOptions}
-        selected={[]}
+        selected=""
         onChange={() => {}}
         maxVisible={5}
       />,
@@ -108,7 +103,7 @@ describe("SearchableFilter Component", () => {
       <SearchableFilter
         label="Kategori"
         options={mockOptions}
-        selected={[]}
+        selected=""
         onChange={() => {}}
       />,
     );
@@ -125,9 +120,6 @@ describe("SearchableFilter Component", () => {
     const searchInput = screen.getByPlaceholderText(/cari kategori.../i);
 
     // Ketik query pencarian "Kategori A" di input pencarian
-    // act(() => {
-    //   fireEvent.change(searchInput, { target: { value: "Kategori A" } });
-    // });
     await act(async () => {
       await user.type(searchInput, "Kategori A");
     });
@@ -149,7 +141,7 @@ describe("SearchableFilter Component", () => {
       <SearchableFilter
         label="Kategori"
         options={mockOptions}
-        selected={[]}
+        selected=""
         onChange={() => {}}
       />,
     );
@@ -179,29 +171,29 @@ describe("SearchableFilter Component", () => {
       <SearchableFilter
         label="Kategori"
         options={mockOptions}
-        selected={["1"]}
+        selected="Kategori A"
         onChange={mockOnChange}
       />,
     );
 
-    const button = screen.getByRole("button", { name: /kategori \(1\)/i });
+    const button = screen.getByRole("button", { name: "Kategori A" });
 
     await act(async () => {
       await user.click(button);
     });
 
-    // PERBAIKAN: Mengubah "option" menjadi "menuitem" untuk uncheck Kategori A
+    // Klik opsi yang sudah selected ("Kategori A") -> toggle off, jadi string kosong
     const optionA = screen.getByRole("menuitem", { name: "Kategori A" });
     await act(async () => {
       await user.click(optionA);
     });
-    expect(mockOnChange).toHaveBeenCalledWith([]);
+    expect(mockOnChange).toHaveBeenCalledWith("");
 
-    // PERBAIKAN: Mengubah "option" menjadi "menuitem" untuk check Kategori B
+    // Klik opsi lain ("Kategori B") -> jadi opsi yang baru dipilih
     const optionB = screen.getByRole("menuitem", { name: "Kategori B" });
     await act(async () => {
       await user.click(optionB);
     });
-    expect(mockOnChange).toHaveBeenCalledWith(["1", "2"]);
+    expect(mockOnChange).toHaveBeenCalledWith("Kategori B");
   });
 });

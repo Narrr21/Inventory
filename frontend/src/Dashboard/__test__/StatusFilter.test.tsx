@@ -1,13 +1,10 @@
 import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import StatusFilter, { type StatusOption } from "../components/StatusFilter";
+import StatusFilter from "../components/StatusFilter";
 import { describe, expect, it, vi } from "vitest";
 
 describe("StatusFilter Component", () => {
-  const mockOptions: StatusOption[] = [
-    { value: "active", label: "Aktif" },
-    { value: "inactive", label: "Non-Aktif" },
-  ];
+  const mockOptions: string[] = ["Healthy", "Broken"];
 
   it("harus merender label dan nilai default dengan benar", () => {
     render(
@@ -42,10 +39,8 @@ describe("StatusFilter Component", () => {
 
     // Pastikan semua opsi muncul di layar
     expect(screen.getByRole("option", { name: "Semua" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Aktif" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: "Non-Aktif" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Healthy" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Broken" })).toBeInTheDocument();
   });
 
   it("harus memanggil fungsi onChange ketika opsi dipilih", async () => {
@@ -64,19 +59,19 @@ describe("StatusFilter Component", () => {
       await user.click(selectTrigger);
     });
 
-    // Ambil opsi "Aktif"
-    const optionActive = screen.getByRole("option", { name: "Aktif" });
+    // Ambil opsi "Healthy"
+    const optionHealthy = screen.getByRole("option", { name: "Healthy" });
 
-    // Klik opsi "Aktif"
+    // Klik opsi "Healthy"
     await act(async () => {
-      await user.click(optionActive);
+      await user.click(optionHealthy);
     });
 
     // Pastikan fungsi onChange dipanggil sekali
     expect(mockOnChange).toHaveBeenCalledTimes(1);
 
     // Pastikan fungsi onChange dipanggil dengan nilai yang benar
-    expect(mockOnChange).toHaveBeenCalledWith("active");
+    expect(mockOnChange).toHaveBeenCalledWith("Healthy");
   });
 
   it("harus menampilkan teks opsi yang dipilih di layar setelah status berubah", async () => {
@@ -93,19 +88,19 @@ describe("StatusFilter Component", () => {
       await user.click(selectTrigger);
     });
 
-    // Ambil opsi "Aktif"
-    const optionActive = screen.getByRole("option", { name: "Aktif" });
+    // Ambil opsi "Healthy"
+    const optionHealthy = screen.getByRole("option", { name: "Healthy" });
 
-    // Klik opsi "Aktif"
+    // Klik opsi "Healthy"
     await act(async () => {
-      await user.click(optionActive);
+      await user.click(optionHealthy);
     });
 
     // Rerender komponen dengan nilai baru
     await act(async () => {
       rerender(
         <StatusFilter
-          value="active"
+          value="Healthy"
           options={mockOptions}
           onChange={() => {}}
         />,
@@ -113,6 +108,6 @@ describe("StatusFilter Component", () => {
     });
 
     // Pastikan teks opsi yang dipilih muncul di layar
-    expect(screen.getByText("Aktif")).toBeInTheDocument();
+    expect(screen.getByText("Healthy")).toBeInTheDocument();
   });
 });
