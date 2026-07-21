@@ -228,23 +228,26 @@ func TestItemsLifecycle(t *testing.T) {
 			t.Errorf("meta.total = %v, want 1", meta["total"])
 		}
 
+		// credentials/remoteInfo are free-form, like customAttributes — no
+		// server-side redaction, so the list response carries the same
+		// content as GetItem.
 		first := data[0].(map[string]interface{})
 		credentials := first["credentials"].(map[string]interface{})
-		if _, ok := credentials["passwordAccount"]; ok {
-			t.Error("expected credentials.passwordAccount to be omitted from list response")
+		if credentials["passwordAccount"] != "pw1" {
+			t.Errorf("expected credentials.passwordAccount in list response, got %+v", credentials)
 		}
-		if _, ok := credentials["passwordPin"]; ok {
-			t.Error("expected credentials.passwordPin to be omitted from list response")
+		if credentials["passwordPin"] != "1111" {
+			t.Errorf("expected credentials.passwordPin in list response, got %+v", credentials)
 		}
 		if credentials["account"] != "user1" {
-			t.Errorf("expected credentials.account to survive redaction, got %+v", credentials)
+			t.Errorf("expected credentials.account in list response, got %+v", credentials)
 		}
 		remoteInfo := first["remoteInfo"].(map[string]interface{})
-		if _, ok := remoteInfo["passwordRemote"]; ok {
-			t.Error("expected remoteInfo.passwordRemote to be omitted from list response")
+		if remoteInfo["passwordRemote"] != "pw2" {
+			t.Errorf("expected remoteInfo.passwordRemote in list response, got %+v", remoteInfo)
 		}
 		if remoteInfo["ipAddress"] != "10.0.0.1" || remoteInfo["anydesk"] != "111" || remoteInfo["rustdesk"] != "222" {
-			t.Errorf("expected remoteInfo non-secret fields to survive redaction, got %+v", remoteInfo)
+			t.Errorf("expected remoteInfo fields in list response, got %+v", remoteInfo)
 		}
 	})
 
@@ -457,6 +460,48 @@ func TestListFilterSearchSortPagination(t *testing.T) {
 		}
 	})
 
+	t.Run("FilterByNamaProyek", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items?namaProyek="+projectA["namaProyek"].(string), nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].([]interface{})
+		if len(data) != 2 {
+			t.Fatalf("len(data) = %d, want 2", len(data))
+		}
+	})
+
+	t.Run("FilterByNamaProyekUnknownReturnsEmpty", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items?namaProyek=NoSuchProject", nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].([]interface{})
+		if len(data) != 0 {
+			t.Errorf("data = %v, want empty", data)
+		}
+		meta := env["meta"].(map[string]interface{})
+		if meta["total"].(float64) != 0 {
+			t.Errorf("meta.total = %v, want 0", meta["total"])
+		}
+	})
+
+	t.Run("FilterByIdProyekTakesPrecedenceOverNamaProyek", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodGet,
+			"/api/v1/items?idProyek="+projectB["_id"].(string)+"&namaProyek="+projectA["namaProyek"].(string), nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].([]interface{})
+		if len(data) != 1 {
+			t.Fatalf("len(data) = %d, want 1 (projectB's single item)", len(data))
+		}
+		first := data[0].(map[string]interface{})
+		if first["idProyek"] != projectB["_id"] {
+			t.Errorf("idProyek = %v, want %v (literal idProyek should win)", first["idProyek"], projectB["_id"])
+		}
+	})
+
 	t.Run("Search", func(t *testing.T) {
 		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items?q=BBB", nil)
 		if status != http.StatusOK {
@@ -548,6 +593,20 @@ func TestFilterOptionsAndStats(t *testing.T) {
 		jenis := data["jenis"].([]interface{})
 		if len(jenis) != 2 {
 			t.Errorf("jenis = %v, want 2 distinct values", jenis)
+		}
+
+		// project must carry full Project objects (_id + namaProyek + lokasi)
+		// so a client never needs a separate GET /projects call just to
+		// populate an idProyek/namaProyek dropdown.
+		projects := data["project"].([]interface{})
+		if len(projects) != 2 {
+			t.Fatalf("project = %v, want 2 entries (one per auto-created project)", projects)
+		}
+		first := projects[0].(map[string]interface{})
+		for _, field := range []string{"_id", "namaProyek", "lokasi"} {
+			if _, ok := first[field]; !ok {
+				t.Errorf("project entry missing %q: %+v", field, first)
+			}
 		}
 	})
 
@@ -679,6 +738,46 @@ func TestCustomAttributesAutoRouting(t *testing.T) {
 		}
 	})
 
+}
+
+// TestCredentialsAndRemoteInfoAreFreeForm exercises the fix for a bug where
+// Credentials/RemoteInfo were decoded into fixed-shape Go structs, so any
+// sub-key outside the documented set (account/passwordAccount/passwordPin,
+// ipAddress/anydesk/rustdesk/passwordRemote) was silently dropped instead of
+// stored — a client sending an arbitrary key got back a 201 with an empty
+// object and no indication anything was lost. Like customAttributes, these
+// are schemaless: whatever key/value pairs are sent must round-trip as-is.
+func TestCredentialsAndRemoteInfoAreFreeForm(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+
+	t.Run("CreatePreservesArbitraryKeys", func(t *testing.T) {
+		created := createItem(t, baseURL, map[string]interface{}{
+			"credentials": map[string]interface{}{"111": "12"},
+			"remoteInfo":  map[string]interface{}{"122": "13"},
+		})
+
+		credentials := created["credentials"].(map[string]interface{})
+		if credentials["111"] != "12" {
+			t.Errorf("credentials = %+v, want 111=12 preserved", credentials)
+		}
+		remoteInfo := created["remoteInfo"].(map[string]interface{})
+		if remoteInfo["122"] != "13" {
+			t.Errorf("remoteInfo = %+v, want 122=13 preserved", remoteInfo)
+		}
+	})
+
+	t.Run("UnsetCredentialsDefaultToEmptyObjectNotNull", func(t *testing.T) {
+		created := createItem(t, baseURL, map[string]interface{}{
+			"credentials": map[string]interface{}{},
+			"remoteInfo":  map[string]interface{}{},
+		})
+		if _, ok := created["credentials"].(map[string]interface{}); !ok {
+			t.Errorf("credentials = %+v (%T), want {} not null", created["credentials"], created["credentials"])
+		}
+		if _, ok := created["remoteInfo"].(map[string]interface{}); !ok {
+			t.Errorf("remoteInfo = %+v (%T), want {} not null", created["remoteInfo"], created["remoteInfo"])
+		}
+	})
 }
 
 // TestFilterAndSortByCustomAttribute checks that customAttributes.<key> works
@@ -959,4 +1058,97 @@ func TestListLimitClamp(t *testing.T) {
 	if meta["limit"].(float64) != 100 {
 		t.Errorf("meta.limit = %v, want clamped to 100", meta["limit"])
 	}
+}
+
+// TestItemNamaProyekField checks that every Item response path (create,
+// get, list, update) denormalizes idProyek into a namaProyek the client
+// can display without a separate /projects lookup, and that it degrades
+// gracefully (empty, not an error) for an orphaned idProyek.
+func TestItemNamaProyekField(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+
+	project := createProject(t, baseURL, map[string]interface{}{"namaProyek": "PROJNAME-TEST"})
+	projectID := project["_id"].(string)
+
+	t.Run("Create", func(t *testing.T) {
+		created := createItem(t, baseURL, map[string]interface{}{"idProyek": projectID})
+		if created["namaProyek"] != "PROJNAME-TEST" {
+			t.Errorf("namaProyek = %v, want PROJNAME-TEST", created["namaProyek"])
+		}
+	})
+
+	t.Run("Get", func(t *testing.T) {
+		created := createItem(t, baseURL, map[string]interface{}{"idProyek": projectID})
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/"+created["_id"].(string), nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].(map[string]interface{})
+		if data["namaProyek"] != "PROJNAME-TEST" {
+			t.Errorf("namaProyek = %v, want PROJNAME-TEST", data["namaProyek"])
+		}
+	})
+
+	t.Run("List", func(t *testing.T) {
+		createItem(t, baseURL, map[string]interface{}{"idProyek": projectID})
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items?idProyek="+projectID, nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].([]interface{})
+		if len(data) == 0 {
+			t.Fatal("expected at least one item")
+		}
+		first := data[0].(map[string]interface{})
+		if first["namaProyek"] != "PROJNAME-TEST" {
+			t.Errorf("namaProyek = %v, want PROJNAME-TEST", first["namaProyek"])
+		}
+	})
+
+	t.Run("Update", func(t *testing.T) {
+		created := createItem(t, baseURL, map[string]interface{}{"idProyek": projectID})
+		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/items/"+created["_id"].(string),
+			map[string]interface{}{"status": "Broken"})
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].(map[string]interface{})
+		if data["namaProyek"] != "PROJNAME-TEST" {
+			t.Errorf("namaProyek = %v, want PROJNAME-TEST", data["namaProyek"])
+		}
+	})
+
+	t.Run("SendingNamaProyekOnCreateIsIgnoredNotFoldedIntoCustomAttributes", func(t *testing.T) {
+		created := createItem(t, baseURL, map[string]interface{}{
+			"idProyek":   projectID,
+			"namaProyek": "attacker-supplied",
+		})
+		if created["namaProyek"] != "PROJNAME-TEST" {
+			t.Errorf("namaProyek = %v, want server-resolved PROJNAME-TEST (client value must be ignored)", created["namaProyek"])
+		}
+		if custom, ok := created["customAttributes"].(map[string]interface{}); ok {
+			if _, ok := custom["namaProyek"]; ok {
+				t.Errorf("namaProyek leaked into customAttributes: %+v", custom)
+			}
+		}
+	})
+
+	t.Run("OrphanedIdProyekLeavesNamaProyekEmpty", func(t *testing.T) {
+		orphanProject := createProject(t, baseURL, nil)
+		item := createItem(t, baseURL, map[string]interface{}{"idProyek": orphanProject["_id"]})
+
+		status, env := apiRequest(t, baseURL, http.MethodDelete, "/api/v1/projects/"+orphanProject["_id"].(string), nil)
+		if status != http.StatusOK {
+			t.Fatalf("delete project: status = %d, body = %+v", status, env)
+		}
+
+		status, env = apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/"+item["_id"].(string), nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].(map[string]interface{})
+		if v, ok := data["namaProyek"]; ok && v != "" {
+			t.Errorf("namaProyek = %v, want empty/absent for orphaned idProyek", v)
+		}
+	})
 }

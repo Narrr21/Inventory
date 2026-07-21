@@ -2,35 +2,26 @@ package models
 
 import "encoding/json"
 
-type Credentials struct {
-	Account         string `bson:"account,omitempty" json:"account,omitempty"`
-	PasswordAccount string `bson:"passwordAccount,omitempty" json:"passwordAccount,omitempty"`
-	PasswordPin     string `bson:"passwordPin,omitempty" json:"passwordPin,omitempty"`
-}
+// Credentials and RemoteInfo are schemaless, like CustomAttributes — any
+// top-level key sent under "credentials"/"remoteInfo" is preserved as-is,
+// not limited to a fixed set of sub-fields. There is no server-side
+// redaction of secret-looking keys (e.g. passwordPin): callers get back
+// exactly what they stored, in both GetItem and ListItems.
+type Credentials = map[string]interface{}
 
-type CredentialsPublic struct {
-	Account string `bson:"account,omitempty" json:"account,omitempty"`
-}
-
-type RemoteInfo struct {
-	IPAddress      string `bson:"ipAddress,omitempty" json:"ipAddress,omitempty"`
-	Anydesk        string `bson:"anydesk,omitempty" json:"anydesk,omitempty"`
-	Rustdesk       string `bson:"rustdesk,omitempty" json:"rustdesk,omitempty"`
-	PasswordRemote string `bson:"passwordRemote,omitempty" json:"passwordRemote,omitempty"`
-}
-
-type RemoteInfoPublic struct {
-	IPAddress string `bson:"ipAddress,omitempty" json:"ipAddress,omitempty"`
-	Anydesk   string `bson:"anydesk,omitempty" json:"anydesk,omitempty"`
-	Rustdesk  string `bson:"rustdesk,omitempty" json:"rustdesk,omitempty"`
-}
+type RemoteInfo = map[string]interface{}
 
 type Item struct {
-	ID               string                 `bson:"_id" json:"_id"`
-	Jenis            string                 `bson:"jenis" json:"jenis"`
-	SerialNumber     string                 `bson:"serialNumber" json:"serialNumber"`
-	Nama             string                 `bson:"nama" json:"nama"`
-	IdProyek         string                 `bson:"idProyek" json:"idProyek"`
+	ID           string `bson:"_id" json:"_id"`
+	Jenis        string `bson:"jenis" json:"jenis"`
+	SerialNumber string `bson:"serialNumber" json:"serialNumber"`
+	Nama         string `bson:"nama" json:"nama"`
+	IdProyek     string `bson:"idProyek" json:"idProyek"`
+	// NamaProyek is never stored — it's the referenced Project's own
+	// namaProyek, resolved and set by the handler at response time, so it
+	// can't go stale independently of the Project document and needs no
+	// migration.
+	NamaProyek       string                 `bson:"-" json:"namaProyek,omitempty"`
 	Credentials      Credentials            `bson:"credentials" json:"credentials"`
 	RemoteInfo       RemoteInfo             `bson:"remoteInfo" json:"remoteInfo"`
 	LicenseWindows   string                 `bson:"licenseWindows" json:"licenseWindows"`
@@ -48,8 +39,9 @@ type ItemPublic struct {
 	SerialNumber     string                 `json:"serialNumber"`
 	Nama             string                 `json:"nama"`
 	IdProyek         string                 `json:"idProyek"`
-	Credentials      CredentialsPublic      `json:"credentials"`
-	RemoteInfo       RemoteInfoPublic       `json:"remoteInfo"`
+	NamaProyek       string                 `json:"namaProyek,omitempty"`
+	Credentials      Credentials            `json:"credentials"`
+	RemoteInfo       RemoteInfo             `json:"remoteInfo"`
 	LicenseWindows   string                 `json:"licenseWindows"`
 	LicenseOffice    string                 `json:"licenseOffice"`
 	Status           string                 `json:"status"`
@@ -61,17 +53,14 @@ type ItemPublic struct {
 
 func (i Item) Public() ItemPublic {
 	return ItemPublic{
-		ID:           i.ID,
-		Jenis:        i.Jenis,
-		SerialNumber: i.SerialNumber,
-		Nama:         i.Nama,
-		IdProyek:     i.IdProyek,
-		Credentials:  CredentialsPublic{Account: i.Credentials.Account},
-		RemoteInfo: RemoteInfoPublic{
-			IPAddress: i.RemoteInfo.IPAddress,
-			Anydesk:   i.RemoteInfo.Anydesk,
-			Rustdesk:  i.RemoteInfo.Rustdesk,
-		},
+		ID:               i.ID,
+		Jenis:            i.Jenis,
+		SerialNumber:     i.SerialNumber,
+		Nama:             i.Nama,
+		IdProyek:         i.IdProyek,
+		NamaProyek:       i.NamaProyek,
+		Credentials:      i.Credentials,
+		RemoteInfo:       i.RemoteInfo,
 		LicenseWindows:   i.LicenseWindows,
 		LicenseOffice:    i.LicenseOffice,
 		Status:           i.Status,
@@ -79,6 +68,19 @@ func (i Item) Public() ItemPublic {
 		CustomAttributes: i.CustomAttributes,
 		CreatedAt:        i.CreatedAt,
 		UpdatedAt:        i.UpdatedAt,
+	}
+}
+
+// EnsureMaps normalizes nil Credentials/RemoteInfo to empty (non-nil) maps,
+// so a response always shows "credentials": {} rather than "null" for an
+// item that never had them set — nil maps marshal to JSON null, unlike the
+// old fixed-shape structs which always had a zero value that encoded as {}.
+func (i *Item) EnsureMaps() {
+	if i.Credentials == nil {
+		i.Credentials = Credentials{}
+	}
+	if i.RemoteInfo == nil {
+		i.RemoteInfo = RemoteInfo{}
 	}
 }
 

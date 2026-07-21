@@ -24,6 +24,12 @@ func NewItemHandler(repo *repository.ItemRepository, projectRepo *repository.Pro
 	return &ItemHandler{repo: repo, projectRepo: projectRepo}
 }
 
+// noSuchProjectSentinel is used as the idProyek filter value when a
+// namaProyek query param doesn't resolve to any project — guaranteed to
+// never match a real item, since real idProyek values are always 24-char
+// Mongo ObjectId hex strings.
+const noSuchProjectSentinel = "__no_such_project__"
+
 // knownItemFields are the top-level JSON keys the Item model declares.
 var knownItemFields = map[string]bool{
 	"jenis": true, "serialNumber": true, "nama": true, "idProyek": true,
@@ -49,7 +55,7 @@ func splitCustomAttributes(raw map[string]interface{}) (known map[string]interfa
 	}
 
 	for k, v := range raw {
-		if k == "customAttributes" || k == "_id" {
+		if k == "customAttributes" || k == "_id" || k == "namaProyek" {
 			continue
 		}
 		if knownItemFields[k] {
@@ -60,6 +66,33 @@ func splitCustomAttributes(raw map[string]interface{}) (known map[string]interfa
 	}
 
 	return known, custom
+}
+
+// buildNamaProyekIndex fetches every project once and returns a lookup
+// from idProyek -> namaProyek, used to denormalize a project's display name
+// onto Item responses without a per-item round trip. A lookup failure is
+// swallowed (empty index) rather than failing the whole request — namaProyek
+// is a convenience field, not load-bearing.
+func buildNamaProyekIndex(ctx context.Context, projects *repository.ProjectRepository) map[string]string {
+	list, err := projects.List(ctx)
+	if err != nil {
+		return map[string]string{}
+	}
+	index := make(map[string]string, len(list))
+	for _, p := range list {
+		index[p.ID] = p.NamaProyek
+	}
+	return index
+}
+
+// resolveNamaProyek looks up a single project's name for one item. Like
+// buildNamaProyekIndex, a lookup failure just leaves the name empty.
+func (h *ItemHandler) resolveNamaProyek(ctx context.Context, idProyek string) string {
+	project, err := h.projectRepo.GetByID(ctx, idProyek)
+	if err != nil {
+		return ""
+	}
+	return project.NamaProyek
 }
 
 // validate checks required fields on item and, if idProyek is set, that it
@@ -105,6 +138,7 @@ func (h *ItemHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
 	knownBytes, _ := json.Marshal(known)
 	var item models.Item
 	_ = json.Unmarshal(knownBytes, &item)
+	item.EnsureMaps()
 
 	if fields := h.validate(r.Context(), item); len(fields) > 0 {
 		response.Err(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "Invalid item fields", fields)
@@ -116,6 +150,7 @@ func (h *ItemHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create item", nil)
 		return
 	}
+	created.NamaProyek = h.resolveNamaProyek(r.Context(), created.IdProyek)
 	response.OK(w, http.StatusCreated, created, nil)
 }
 
@@ -146,6 +181,24 @@ func (h *ItemHandler) ListItems(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// namaProyek is an alternate way to filter by project — resolved to
+	// idProyek server-side, since that's what's actually stored on Item. A
+	// literal idProyek param always takes precedence if both are sent.
+	if namaProyek := q.Get("namaProyek"); namaProyek != "" && filters["idProyek"] == "" {
+		project, err := h.projectRepo.GetByName(r.Context(), namaProyek)
+		switch {
+		case errors.Is(err, repository.ErrNotFound):
+			// No such project — zero results, not an error, consistent with
+			// how an unmatched idProyek or customAttributes filter behaves.
+			filters["idProyek"] = noSuchProjectSentinel
+		case err != nil:
+			response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to resolve namaProyek", nil)
+			return
+		default:
+			filters["idProyek"] = project.ID
+		}
+	}
+
 	result, err := h.repo.List(r.Context(), repository.ListParams{
 		Page:      page,
 		Limit:     limit,
@@ -163,8 +216,11 @@ func (h *ItemHandler) ListItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	namaProyekByID := buildNamaProyekIndex(r.Context(), h.projectRepo)
 	items := make([]models.ItemPublic, 0, len(result.Items))
 	for _, it := range result.Items {
+		it.EnsureMaps()
+		it.NamaProyek = namaProyekByID[it.IdProyek]
 		items = append(items, it.Public())
 	}
 	meta := map[string]interface{}{
@@ -188,6 +244,8 @@ func (h *ItemHandler) GetItem(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get item", nil)
 		return
 	}
+	item.EnsureMaps()
+	item.NamaProyek = h.resolveNamaProyek(r.Context(), item.IdProyek)
 	response.OK(w, http.StatusOK, item, nil)
 }
 
@@ -234,6 +292,8 @@ func (h *ItemHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update item", nil)
 		return
 	}
+	item.EnsureMaps()
+	item.NamaProyek = h.resolveNamaProyek(r.Context(), item.IdProyek)
 	response.OK(w, http.StatusOK, item, nil)
 }
 
@@ -259,7 +319,22 @@ func (h *ItemHandler) FilterOptions(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load filter options", nil)
 		return
 	}
-	response.OK(w, http.StatusOK, data, nil)
+
+	// Also include the full project list here, so a client populating the
+	// idProyek/namaProyek dropdown never needs a separate GET /projects
+	// round trip just for that — same data, same order (by namaProyek).
+	projects, err := h.projectRepo.List(r.Context())
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load filter options", nil)
+		return
+	}
+
+	result := map[string]interface{}{
+		"jenis":   data["jenis"],
+		"status":  data["status"],
+		"project": projects,
+	}
+	response.OK(w, http.StatusOK, result, nil)
 }
 
 func (h *ItemHandler) distinctFieldValues(w http.ResponseWriter, r *http.Request, field string) {
@@ -306,8 +381,11 @@ func (h *ItemHandler) Stats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	namaProyekByID := buildNamaProyekIndex(ctx, h.projectRepo)
 	recentPublic := make([]models.ItemPublic, 0, len(recent))
 	for _, it := range recent {
+		it.EnsureMaps()
+		it.NamaProyek = namaProyekByID[it.IdProyek]
 		recentPublic = append(recentPublic, it.Public())
 	}
 
