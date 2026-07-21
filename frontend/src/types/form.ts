@@ -15,14 +15,14 @@ export interface ItemFormData {
   id?: string;
   name: string;
   serial_number: string;
-  license_windows: string;
-  license_office: string;
+  licenseWindows: string;
+  licenseOffice: string;
   status: string;
   jenis: string;
   proyek: string;
   idProyek: string;
   credentials: FieldInfo[];
-  remote_info: FieldInfo[];
+  remoteInfo: FieldInfo[];
   customAttributes: FieldInfo[];
   deskripsi: string;
 }

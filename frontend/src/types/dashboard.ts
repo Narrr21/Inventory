@@ -31,14 +31,14 @@ export interface BackendItem {
   idProyek: string;
   namaProyek: string;
   credentials?: Record<string, string>;
-  remote_info?: Record<string, string>;
-  license_windows?: string;
-  license_office?: string;
+  remoteInfo?: Record<string, string>;
+  licenseWindows?: string;
+  licenseOffice?: string;
   status: string;
   deskripsi?: string;
   customAttributes?: Record<string, string>;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Project {

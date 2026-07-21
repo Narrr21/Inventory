@@ -34,13 +34,13 @@ export const mapBackendToItemForm = (item: BackendItem): ItemFormData => {
     id: item._id,
     name: item.nama || "",
     serial_number: item.serialNumber || "",
-    license_windows: item.license_windows || "",
-    license_office: item.license_office || "",
+    licenseWindows: item.licenseWindows || "",
+    licenseOffice: item.licenseOffice || "",
     status: item.status || "",
     jenis: item.jenis || "",
     proyek: item.namaProyek || "",
     credentials: mapObjectToFields(item.credentials),
-    remote_info: mapObjectToFields(item.remote_info),
+    remoteInfo: mapObjectToFields(item.remoteInfo),
     customAttributes: mapObjectToFields(item.customAttributes),
     deskripsi: item.deskripsi || "",
     idProyek: item.idProyek || "",
@@ -53,17 +53,17 @@ export const mapItemFormToBackend = (formData: ItemFormData): BackendItem => {
     _id: formData.id || "",
     nama: formData.name,
     serialNumber: formData.serial_number,
-    license_windows: formData.license_windows,
-    license_office: formData.license_office,
+    licenseWindows: formData.licenseWindows,
+    licenseOffice: formData.licenseOffice,
     status: formData.status,
     jenis: formData.jenis,
     idProyek: formData.idProyek,
     namaProyek: formData.proyek,
     credentials: mapFieldsToObject(formData.credentials),
-    remote_info: mapFieldsToObject(formData.remote_info),
+    remoteInfo: mapFieldsToObject(formData.remoteInfo),
     customAttributes: mapFieldsToObject(formData.customAttributes),
-    created_at: "", // Placeholder, backend will handle this
-    updated_at: "", // Placeholder, backend will handle this
+    createdAt: "", // Placeholder, backend will handle this
+    updatedAt: "", // Placeholder, backend will handle this
   };
 };
 
@@ -74,11 +74,11 @@ export const mapItemFormToCreateRequest = (formData: ItemFormData): CreateItemRe
     nama: formData.name,
     idProyek: formData.idProyek,
     status: formData.status,
-    licenseWindows: formData.license_windows,
-    licenseOffice: formData.license_office,
+    licenseWindows: formData.licenseWindows,
+    licenseOffice: formData.licenseOffice,
     deskripsi: formData.deskripsi,
     credentials: mapFieldsToObject(formData.credentials),
-    remoteInfo: mapFieldsToObject(formData.remote_info),
+    remoteInfo: mapFieldsToObject(formData.remoteInfo),
     customAttributes: mapFieldsToObject(formData.customAttributes),
   };
 }
@@ -90,11 +90,11 @@ export const mapItemFormToUpdateRequest = (formData: ItemFormData): Partial<Upda
     nama: formData.name,
     idProyek: formData.idProyek,
     status: formData.status,
-    licenseWindows: formData.license_windows,
-    licenseOffice: formData.license_office,
+    licenseWindows: formData.licenseWindows,
+    licenseOffice: formData.licenseOffice,
     deskripsi: formData.deskripsi,
     credentials: mapFieldsToObject(formData.credentials),
-    remoteInfo: mapFieldsToObject(formData.remote_info),
+    remoteInfo: mapFieldsToObject(formData.remoteInfo),
     customAttributes: mapFieldsToObject(formData.customAttributes),
   };
 }
