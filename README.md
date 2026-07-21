@@ -94,7 +94,7 @@ curl -X POST http://localhost:8080/api/v1/projects -H "Content-Type: application
 curl -X POST http://localhost:8080/api/v1/items -H "Content-Type: application/json" -d '{"jenis":"Laptop","serialNumber":"SN-00123","nama":"RTI-ALPHA-005","status":"Healthy","idProyek":"<_id from the project response above>"}'
 ```
 
-Every Item response (create/list/get/update) also carries a read-only `projectName`, resolved
+Every Item response (create/list/get/update) also carries a read-only `namaProyek`, resolved
 server-side from `idProyek` — no separate `/projects` lookup needed just to display it.
 
 #### 3. Run Frontend (React + Vite)

@@ -1017,11 +1017,11 @@ func TestListLimitClamp(t *testing.T) {
 	}
 }
 
-// TestItemProjectNameField checks that every Item response path (create,
-// get, list, update) denormalizes idProyek into a projectName the client
+// TestItemNamaProyekField checks that every Item response path (create,
+// get, list, update) denormalizes idProyek into a namaProyek the client
 // can display without a separate /projects lookup, and that it degrades
 // gracefully (empty, not an error) for an orphaned idProyek.
-func TestItemProjectNameField(t *testing.T) {
+func TestItemNamaProyekField(t *testing.T) {
 	baseURL := setupBackendAPI(t)
 
 	project := createProject(t, baseURL, map[string]interface{}{"namaProyek": "PROJNAME-TEST"})
@@ -1029,8 +1029,8 @@ func TestItemProjectNameField(t *testing.T) {
 
 	t.Run("Create", func(t *testing.T) {
 		created := createItem(t, baseURL, map[string]interface{}{"idProyek": projectID})
-		if created["projectName"] != "PROJNAME-TEST" {
-			t.Errorf("projectName = %v, want PROJNAME-TEST", created["projectName"])
+		if created["namaProyek"] != "PROJNAME-TEST" {
+			t.Errorf("namaProyek = %v, want PROJNAME-TEST", created["namaProyek"])
 		}
 	})
 
@@ -1041,8 +1041,8 @@ func TestItemProjectNameField(t *testing.T) {
 			t.Fatalf("status = %d, body = %+v", status, env)
 		}
 		data := env["data"].(map[string]interface{})
-		if data["projectName"] != "PROJNAME-TEST" {
-			t.Errorf("projectName = %v, want PROJNAME-TEST", data["projectName"])
+		if data["namaProyek"] != "PROJNAME-TEST" {
+			t.Errorf("namaProyek = %v, want PROJNAME-TEST", data["namaProyek"])
 		}
 	})
 
@@ -1057,8 +1057,8 @@ func TestItemProjectNameField(t *testing.T) {
 			t.Fatal("expected at least one item")
 		}
 		first := data[0].(map[string]interface{})
-		if first["projectName"] != "PROJNAME-TEST" {
-			t.Errorf("projectName = %v, want PROJNAME-TEST", first["projectName"])
+		if first["namaProyek"] != "PROJNAME-TEST" {
+			t.Errorf("namaProyek = %v, want PROJNAME-TEST", first["namaProyek"])
 		}
 	})
 
@@ -1070,27 +1070,27 @@ func TestItemProjectNameField(t *testing.T) {
 			t.Fatalf("status = %d, body = %+v", status, env)
 		}
 		data := env["data"].(map[string]interface{})
-		if data["projectName"] != "PROJNAME-TEST" {
-			t.Errorf("projectName = %v, want PROJNAME-TEST", data["projectName"])
+		if data["namaProyek"] != "PROJNAME-TEST" {
+			t.Errorf("namaProyek = %v, want PROJNAME-TEST", data["namaProyek"])
 		}
 	})
 
-	t.Run("SendingProjectNameOnCreateIsIgnoredNotFoldedIntoCustomAttributes", func(t *testing.T) {
+	t.Run("SendingNamaProyekOnCreateIsIgnoredNotFoldedIntoCustomAttributes", func(t *testing.T) {
 		created := createItem(t, baseURL, map[string]interface{}{
-			"idProyek":    projectID,
-			"projectName": "attacker-supplied",
+			"idProyek":   projectID,
+			"namaProyek": "attacker-supplied",
 		})
-		if created["projectName"] != "PROJNAME-TEST" {
-			t.Errorf("projectName = %v, want server-resolved PROJNAME-TEST (client value must be ignored)", created["projectName"])
+		if created["namaProyek"] != "PROJNAME-TEST" {
+			t.Errorf("namaProyek = %v, want server-resolved PROJNAME-TEST (client value must be ignored)", created["namaProyek"])
 		}
 		if custom, ok := created["customAttributes"].(map[string]interface{}); ok {
-			if _, ok := custom["projectName"]; ok {
-				t.Errorf("projectName leaked into customAttributes: %+v", custom)
+			if _, ok := custom["namaProyek"]; ok {
+				t.Errorf("namaProyek leaked into customAttributes: %+v", custom)
 			}
 		}
 	})
 
-	t.Run("OrphanedIdProyekLeavesProjectNameEmpty", func(t *testing.T) {
+	t.Run("OrphanedIdProyekLeavesNamaProyekEmpty", func(t *testing.T) {
 		orphanProject := createProject(t, baseURL, nil)
 		item := createItem(t, baseURL, map[string]interface{}{"idProyek": orphanProject["_id"]})
 
@@ -1104,8 +1104,8 @@ func TestItemProjectNameField(t *testing.T) {
 			t.Fatalf("status = %d, body = %+v", status, env)
 		}
 		data := env["data"].(map[string]interface{})
-		if v, ok := data["projectName"]; ok && v != "" {
-			t.Errorf("projectName = %v, want empty/absent for orphaned idProyek", v)
+		if v, ok := data["namaProyek"]; ok && v != "" {
+			t.Errorf("namaProyek = %v, want empty/absent for orphaned idProyek", v)
 		}
 	})
 }
