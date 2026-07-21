@@ -1016,3 +1016,96 @@ func TestListLimitClamp(t *testing.T) {
 		t.Errorf("meta.limit = %v, want clamped to 100", meta["limit"])
 	}
 }
+
+// TestItemProjectNameField checks that every Item response path (create,
+// get, list, update) denormalizes idProyek into a projectName the client
+// can display without a separate /projects lookup, and that it degrades
+// gracefully (empty, not an error) for an orphaned idProyek.
+func TestItemProjectNameField(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+
+	project := createProject(t, baseURL, map[string]interface{}{"namaProyek": "PROJNAME-TEST"})
+	projectID := project["_id"].(string)
+
+	t.Run("Create", func(t *testing.T) {
+		created := createItem(t, baseURL, map[string]interface{}{"idProyek": projectID})
+		if created["projectName"] != "PROJNAME-TEST" {
+			t.Errorf("projectName = %v, want PROJNAME-TEST", created["projectName"])
+		}
+	})
+
+	t.Run("Get", func(t *testing.T) {
+		created := createItem(t, baseURL, map[string]interface{}{"idProyek": projectID})
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/"+created["_id"].(string), nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].(map[string]interface{})
+		if data["projectName"] != "PROJNAME-TEST" {
+			t.Errorf("projectName = %v, want PROJNAME-TEST", data["projectName"])
+		}
+	})
+
+	t.Run("List", func(t *testing.T) {
+		createItem(t, baseURL, map[string]interface{}{"idProyek": projectID})
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items?idProyek="+projectID, nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].([]interface{})
+		if len(data) == 0 {
+			t.Fatal("expected at least one item")
+		}
+		first := data[0].(map[string]interface{})
+		if first["projectName"] != "PROJNAME-TEST" {
+			t.Errorf("projectName = %v, want PROJNAME-TEST", first["projectName"])
+		}
+	})
+
+	t.Run("Update", func(t *testing.T) {
+		created := createItem(t, baseURL, map[string]interface{}{"idProyek": projectID})
+		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/items/"+created["_id"].(string),
+			map[string]interface{}{"status": "Broken"})
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].(map[string]interface{})
+		if data["projectName"] != "PROJNAME-TEST" {
+			t.Errorf("projectName = %v, want PROJNAME-TEST", data["projectName"])
+		}
+	})
+
+	t.Run("SendingProjectNameOnCreateIsIgnoredNotFoldedIntoCustomAttributes", func(t *testing.T) {
+		created := createItem(t, baseURL, map[string]interface{}{
+			"idProyek":    projectID,
+			"projectName": "attacker-supplied",
+		})
+		if created["projectName"] != "PROJNAME-TEST" {
+			t.Errorf("projectName = %v, want server-resolved PROJNAME-TEST (client value must be ignored)", created["projectName"])
+		}
+		if custom, ok := created["customAttributes"].(map[string]interface{}); ok {
+			if _, ok := custom["projectName"]; ok {
+				t.Errorf("projectName leaked into customAttributes: %+v", custom)
+			}
+		}
+	})
+
+	t.Run("OrphanedIdProyekLeavesProjectNameEmpty", func(t *testing.T) {
+		orphanProject := createProject(t, baseURL, nil)
+		item := createItem(t, baseURL, map[string]interface{}{"idProyek": orphanProject["_id"]})
+
+		status, env := apiRequest(t, baseURL, http.MethodDelete, "/api/v1/projects/"+orphanProject["_id"].(string), nil)
+		if status != http.StatusOK {
+			t.Fatalf("delete project: status = %d, body = %+v", status, env)
+		}
+
+		status, env = apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/"+item["_id"].(string), nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].(map[string]interface{})
+		if v, ok := data["projectName"]; ok && v != "" {
+			t.Errorf("projectName = %v, want empty/absent for orphaned idProyek", v)
+		}
+	})
+}
