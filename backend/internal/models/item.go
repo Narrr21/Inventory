@@ -26,11 +26,15 @@ type RemoteInfoPublic struct {
 }
 
 type Item struct {
-	ID               string                 `bson:"_id" json:"_id"`
-	Jenis            string                 `bson:"jenis" json:"jenis"`
-	SerialNumber     string                 `bson:"serialNumber" json:"serialNumber"`
-	Nama             string                 `bson:"nama" json:"nama"`
-	IdProyek         string                 `bson:"idProyek" json:"idProyek"`
+	ID           string `bson:"_id" json:"_id"`
+	Jenis        string `bson:"jenis" json:"jenis"`
+	SerialNumber string `bson:"serialNumber" json:"serialNumber"`
+	Nama         string `bson:"nama" json:"nama"`
+	IdProyek     string `bson:"idProyek" json:"idProyek"`
+	// ProjectName is never stored — it's the referenced Project's namaProyek,
+	// resolved and set by the handler at response time, so it can't go stale
+	// independently of the Project document and needs no migration.
+	ProjectName      string                 `bson:"-" json:"projectName,omitempty"`
 	Credentials      Credentials            `bson:"credentials" json:"credentials"`
 	RemoteInfo       RemoteInfo             `bson:"remoteInfo" json:"remoteInfo"`
 	LicenseWindows   string                 `bson:"licenseWindows" json:"licenseWindows"`
@@ -48,6 +52,7 @@ type ItemPublic struct {
 	SerialNumber     string                 `json:"serialNumber"`
 	Nama             string                 `json:"nama"`
 	IdProyek         string                 `json:"idProyek"`
+	ProjectName      string                 `json:"projectName,omitempty"`
 	Credentials      CredentialsPublic      `json:"credentials"`
 	RemoteInfo       RemoteInfoPublic       `json:"remoteInfo"`
 	LicenseWindows   string                 `json:"licenseWindows"`
@@ -66,6 +71,7 @@ func (i Item) Public() ItemPublic {
 		SerialNumber: i.SerialNumber,
 		Nama:         i.Nama,
 		IdProyek:     i.IdProyek,
+		ProjectName:  i.ProjectName,
 		Credentials:  CredentialsPublic{Account: i.Credentials.Account},
 		RemoteInfo: RemoteInfoPublic{
 			IPAddress: i.RemoteInfo.IPAddress,

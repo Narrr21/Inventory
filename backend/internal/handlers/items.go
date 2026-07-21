@@ -55,7 +55,7 @@ func splitCustomAttributes(raw map[string]interface{}) (known map[string]interfa
 	}
 
 	for k, v := range raw {
-		if k == "customAttributes" || k == "_id" {
+		if k == "customAttributes" || k == "_id" || k == "projectName" {
 			continue
 		}
 		if knownItemFields[k] {
@@ -66,6 +66,33 @@ func splitCustomAttributes(raw map[string]interface{}) (known map[string]interfa
 	}
 
 	return known, custom
+}
+
+// buildProjectNameIndex fetches every project once and returns a lookup
+// from idProyek -> namaProyek, used to denormalize a project's display name
+// onto Item responses without a per-item round trip. A lookup failure is
+// swallowed (empty index) rather than failing the whole request — projectName
+// is a convenience field, not load-bearing.
+func buildProjectNameIndex(ctx context.Context, projects *repository.ProjectRepository) map[string]string {
+	list, err := projects.List(ctx)
+	if err != nil {
+		return map[string]string{}
+	}
+	index := make(map[string]string, len(list))
+	for _, p := range list {
+		index[p.ID] = p.NamaProyek
+	}
+	return index
+}
+
+// resolveProjectName looks up a single project's name for one item. Like
+// buildProjectNameIndex, a lookup failure just leaves the name empty.
+func (h *ItemHandler) resolveProjectName(ctx context.Context, idProyek string) string {
+	project, err := h.projectRepo.GetByID(ctx, idProyek)
+	if err != nil {
+		return ""
+	}
+	return project.NamaProyek
 }
 
 // validate checks required fields on item and, if idProyek is set, that it
@@ -122,6 +149,7 @@ func (h *ItemHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create item", nil)
 		return
 	}
+	created.ProjectName = h.resolveProjectName(r.Context(), created.IdProyek)
 	response.OK(w, http.StatusCreated, created, nil)
 }
 
@@ -187,8 +215,10 @@ func (h *ItemHandler) ListItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	projectNames := buildProjectNameIndex(r.Context(), h.projectRepo)
 	items := make([]models.ItemPublic, 0, len(result.Items))
 	for _, it := range result.Items {
+		it.ProjectName = projectNames[it.IdProyek]
 		items = append(items, it.Public())
 	}
 	meta := map[string]interface{}{
@@ -212,6 +242,7 @@ func (h *ItemHandler) GetItem(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get item", nil)
 		return
 	}
+	item.ProjectName = h.resolveProjectName(r.Context(), item.IdProyek)
 	response.OK(w, http.StatusOK, item, nil)
 }
 
@@ -258,6 +289,7 @@ func (h *ItemHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update item", nil)
 		return
 	}
+	item.ProjectName = h.resolveProjectName(r.Context(), item.IdProyek)
 	response.OK(w, http.StatusOK, item, nil)
 }
 
@@ -345,8 +377,10 @@ func (h *ItemHandler) Stats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	projectNames := buildProjectNameIndex(ctx, h.projectRepo)
 	recentPublic := make([]models.ItemPublic, 0, len(recent))
 	for _, it := range recent {
+		it.ProjectName = projectNames[it.IdProyek]
 		recentPublic = append(recentPublic, it.Public())
 	}
 
