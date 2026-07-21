@@ -38,9 +38,9 @@ func seedItemsFor(projectIDs map[string]string) []models.Item {
 	return []models.Item{
 		{
 			Jenis: "Laptop", SerialNumber: "SN-00123", Nama: "RTI-ALPHA-001", IdProyek: projectIDs["ALPHA"],
-			Credentials: models.Credentials{Account: "user01", PasswordAccount: "secret01", PasswordPin: "1234"},
+			Credentials: models.Credentials{"account": "user01", "passwordAccount": "secret01", "passwordPin": "1234"},
 			RemoteInfo: models.RemoteInfo{
-				IPAddress: "10.0.0.12", Anydesk: "123 456 789", PasswordRemote: "rdpass01",
+				"ipAddress": "10.0.0.12", "anydesk": "123 456 789", "passwordRemote": "rdpass01",
 			},
 			LicenseWindows: "Pro", LicenseOffice: "365", Status: "Healthy",
 			Deskripsi:        "Contoh data seed",
@@ -48,9 +48,9 @@ func seedItemsFor(projectIDs map[string]string) []models.Item {
 		},
 		{
 			Jenis: "PC", SerialNumber: "SN-00124", Nama: "RTI-BETA-002", IdProyek: projectIDs["BETA"],
-			Credentials: models.Credentials{Account: "user02", PasswordAccount: "secret02", PasswordPin: "5678"},
+			Credentials: models.Credentials{"account": "user02", "passwordAccount": "secret02", "passwordPin": "5678"},
 			RemoteInfo: models.RemoteInfo{
-				IPAddress: "10.0.0.13", Rustdesk: "rd-002", PasswordRemote: "rdpass02",
+				"ipAddress": "10.0.0.13", "rustdesk": "rd-002", "passwordRemote": "rdpass02",
 			},
 			LicenseWindows: "Home", LicenseOffice: "2021", Status: "Under Maintenance",
 			Deskripsi: "Contoh data seed 2",
@@ -61,9 +61,9 @@ func seedItemsFor(projectIDs map[string]string) []models.Item {
 		},
 		{
 			Jenis: "Server", SerialNumber: "SN-00126", Nama: "RTI-ALPHA-004", IdProyek: projectIDs["ALPHA"],
-			Credentials: models.Credentials{Account: "svcacct", PasswordAccount: "secret04", PasswordPin: "9999"},
+			Credentials: models.Credentials{"account": "svcacct", "passwordAccount": "secret04", "passwordPin": "9999"},
 			RemoteInfo: models.RemoteInfo{
-				IPAddress: "10.0.0.14", Anydesk: "345 678 901", Rustdesk: "rd-004", PasswordRemote: "rdpass04",
+				"ipAddress": "10.0.0.14", "anydesk": "345 678 901", "rustdesk": "rd-004", "passwordRemote": "rdpass04",
 			},
 			LicenseWindows: "Server 2022", Status: "Healthy",
 			Deskripsi: "Contoh data seed 4",

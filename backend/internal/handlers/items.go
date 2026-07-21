@@ -138,6 +138,7 @@ func (h *ItemHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
 	knownBytes, _ := json.Marshal(known)
 	var item models.Item
 	_ = json.Unmarshal(knownBytes, &item)
+	item.EnsureMaps()
 
 	if fields := h.validate(r.Context(), item); len(fields) > 0 {
 		response.Err(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "Invalid item fields", fields)
@@ -218,6 +219,7 @@ func (h *ItemHandler) ListItems(w http.ResponseWriter, r *http.Request) {
 	namaProyekByID := buildNamaProyekIndex(r.Context(), h.projectRepo)
 	items := make([]models.ItemPublic, 0, len(result.Items))
 	for _, it := range result.Items {
+		it.EnsureMaps()
 		it.NamaProyek = namaProyekByID[it.IdProyek]
 		items = append(items, it.Public())
 	}
@@ -242,6 +244,7 @@ func (h *ItemHandler) GetItem(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get item", nil)
 		return
 	}
+	item.EnsureMaps()
 	item.NamaProyek = h.resolveNamaProyek(r.Context(), item.IdProyek)
 	response.OK(w, http.StatusOK, item, nil)
 }
@@ -289,6 +292,7 @@ func (h *ItemHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update item", nil)
 		return
 	}
+	item.EnsureMaps()
 	item.NamaProyek = h.resolveNamaProyek(r.Context(), item.IdProyek)
 	response.OK(w, http.StatusOK, item, nil)
 }
@@ -380,6 +384,7 @@ func (h *ItemHandler) Stats(w http.ResponseWriter, r *http.Request) {
 	namaProyekByID := buildNamaProyekIndex(ctx, h.projectRepo)
 	recentPublic := make([]models.ItemPublic, 0, len(recent))
 	for _, it := range recent {
+		it.EnsureMaps()
 		it.NamaProyek = namaProyekByID[it.IdProyek]
 		recentPublic = append(recentPublic, it.Public())
 	}

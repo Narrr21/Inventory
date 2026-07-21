@@ -81,37 +81,6 @@ func splitNonEmpty(s string) []string {
 	return out
 }
 
-func flattenCredentials(c models.Credentials) map[string]string {
-	out := map[string]string{}
-	if c.Account != "" {
-		out["account"] = c.Account
-	}
-	if c.PasswordAccount != "" {
-		out["passwordAccount"] = c.PasswordAccount
-	}
-	if c.PasswordPin != "" {
-		out["passwordPin"] = c.PasswordPin
-	}
-	return out
-}
-
-func flattenRemoteInfo(r models.RemoteInfo) map[string]string {
-	out := map[string]string{}
-	if r.IPAddress != "" {
-		out["ipAddress"] = r.IPAddress
-	}
-	if r.Anydesk != "" {
-		out["anydesk"] = r.Anydesk
-	}
-	if r.Rustdesk != "" {
-		out["rustdesk"] = r.Rustdesk
-	}
-	if r.PasswordRemote != "" {
-		out["passwordRemote"] = r.PasswordRemote
-	}
-	return out
-}
-
 func stringifyCustomAttributes(m map[string]interface{}) map[string]string {
 	if len(m) == 0 {
 		return nil
@@ -134,8 +103,8 @@ func toCompatItem(item models.Item, projectNames map[string]string) compatItem {
 		Jenis:          item.Jenis,
 		Proyek:         projectNames[item.IdProyek],
 		CreatedAt:      item.CreatedAt,
-		Credentials:    flattenCredentials(item.Credentials),
-		RemoteInfo:     flattenRemoteInfo(item.RemoteInfo),
+		Credentials:    stringifyCustomAttributes(item.Credentials),
+		RemoteInfo:     stringifyCustomAttributes(item.RemoteInfo),
 		Other:          stringifyCustomAttributes(item.CustomAttributes),
 	}
 }

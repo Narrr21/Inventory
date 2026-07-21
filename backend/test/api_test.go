@@ -228,23 +228,26 @@ func TestItemsLifecycle(t *testing.T) {
 			t.Errorf("meta.total = %v, want 1", meta["total"])
 		}
 
+		// credentials/remoteInfo are free-form, like customAttributes — no
+		// server-side redaction, so the list response carries the same
+		// content as GetItem.
 		first := data[0].(map[string]interface{})
 		credentials := first["credentials"].(map[string]interface{})
-		if _, ok := credentials["passwordAccount"]; ok {
-			t.Error("expected credentials.passwordAccount to be omitted from list response")
+		if credentials["passwordAccount"] != "pw1" {
+			t.Errorf("expected credentials.passwordAccount in list response, got %+v", credentials)
 		}
-		if _, ok := credentials["passwordPin"]; ok {
-			t.Error("expected credentials.passwordPin to be omitted from list response")
+		if credentials["passwordPin"] != "1111" {
+			t.Errorf("expected credentials.passwordPin in list response, got %+v", credentials)
 		}
 		if credentials["account"] != "user1" {
-			t.Errorf("expected credentials.account to survive redaction, got %+v", credentials)
+			t.Errorf("expected credentials.account in list response, got %+v", credentials)
 		}
 		remoteInfo := first["remoteInfo"].(map[string]interface{})
-		if _, ok := remoteInfo["passwordRemote"]; ok {
-			t.Error("expected remoteInfo.passwordRemote to be omitted from list response")
+		if remoteInfo["passwordRemote"] != "pw2" {
+			t.Errorf("expected remoteInfo.passwordRemote in list response, got %+v", remoteInfo)
 		}
 		if remoteInfo["ipAddress"] != "10.0.0.1" || remoteInfo["anydesk"] != "111" || remoteInfo["rustdesk"] != "222" {
-			t.Errorf("expected remoteInfo non-secret fields to survive redaction, got %+v", remoteInfo)
+			t.Errorf("expected remoteInfo fields in list response, got %+v", remoteInfo)
 		}
 	})
 
@@ -735,6 +738,46 @@ func TestCustomAttributesAutoRouting(t *testing.T) {
 		}
 	})
 
+}
+
+// TestCredentialsAndRemoteInfoAreFreeForm exercises the fix for a bug where
+// Credentials/RemoteInfo were decoded into fixed-shape Go structs, so any
+// sub-key outside the documented set (account/passwordAccount/passwordPin,
+// ipAddress/anydesk/rustdesk/passwordRemote) was silently dropped instead of
+// stored — a client sending an arbitrary key got back a 201 with an empty
+// object and no indication anything was lost. Like customAttributes, these
+// are schemaless: whatever key/value pairs are sent must round-trip as-is.
+func TestCredentialsAndRemoteInfoAreFreeForm(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+
+	t.Run("CreatePreservesArbitraryKeys", func(t *testing.T) {
+		created := createItem(t, baseURL, map[string]interface{}{
+			"credentials": map[string]interface{}{"111": "12"},
+			"remoteInfo":  map[string]interface{}{"122": "13"},
+		})
+
+		credentials := created["credentials"].(map[string]interface{})
+		if credentials["111"] != "12" {
+			t.Errorf("credentials = %+v, want 111=12 preserved", credentials)
+		}
+		remoteInfo := created["remoteInfo"].(map[string]interface{})
+		if remoteInfo["122"] != "13" {
+			t.Errorf("remoteInfo = %+v, want 122=13 preserved", remoteInfo)
+		}
+	})
+
+	t.Run("UnsetCredentialsDefaultToEmptyObjectNotNull", func(t *testing.T) {
+		created := createItem(t, baseURL, map[string]interface{}{
+			"credentials": map[string]interface{}{},
+			"remoteInfo":  map[string]interface{}{},
+		})
+		if _, ok := created["credentials"].(map[string]interface{}); !ok {
+			t.Errorf("credentials = %+v (%T), want {} not null", created["credentials"], created["credentials"])
+		}
+		if _, ok := created["remoteInfo"].(map[string]interface{}); !ok {
+			t.Errorf("remoteInfo = %+v (%T), want {} not null", created["remoteInfo"], created["remoteInfo"])
+		}
+	})
 }
 
 // TestFilterAndSortByCustomAttribute checks that customAttributes.<key> works
