@@ -7,63 +7,73 @@ import {
   fetchInventory,
   type FilterOptionsResponse,
   type InventoryResponse,
-} from "./InventoryAPI";
-import type { ColumnDef, FilterOption, SortDirection } from "./types";
+} from "../api/InventoryAPI";
+import { createItem, updateItem, deleteItemAPI } from "../api/CRUDitems";
+import type { ColumnDef, SortDirection } from "../types/dashboard";
+import type { ItemFormData } from "../types/form";
 import MainLayout from "../layouts/MainLayout";
+import { ItemFormModal } from "../FormBarang/components/ItemFormModal";
+import {
+  mapBackendToItemForm,
+  mapItemFormToCreateRequest,
+  mapItemFormToUpdateRequest,
+} from "../api/ItemMapper";
 
 const PAGE_SIZE = 10;
 
 const EMPTY_FILTER_OPTIONS: FilterOptionsResponse = {
-  lokasi: [],
-  project: [],
-  jenisBarang: [],
+  success: true,
+  data: {
+    project: [],
+    jenis: [],
+    status: [],
+  },
 };
 
 const COLUMNS: ColumnDef[] = [
   {
+    label: "ID",
+    key: "_id",
+    width: 100,
+  },
+  {
     label: "Nama Barang",
-    key: "namaBarang",
-    width: 400,
-  },
-  {
-    label: "Lokasi",
-    key: "lokasi",
-    width: 200,
-  },
-  {
-    label: "Project",
-    key: "project",
+    key: "nama",
     width: 300,
   },
   {
-    label: "Jenis Barang",
-    key: "jenisBarang",
+    label: "Serial Number",
+    key: "serialNumber",
     width: 150,
+  },
+  {
+    label: "Project",
+    key: "namaProyek",
+    width: 150,
+  },
+  {
+    label: "Jenis",
+    key: "jenis",
+    width: 200,
   },
   {
     label: "Status",
     key: "status",
-    width: 120,
+    width: 150,
   },
   {
-    label: "Qty",
-    key: "qty",
+    label: "Aksi",
+    key: "actions",
     width: 100,
+    sortable: false,
   },
-];
-
-const STATUS_OPTIONS: FilterOption[] = [
-  { label: "Healthy", value: "Healthy" },
-  { label: "Under Maintenance", value: "Under Maintenance" },
-  { label: "Broken", value: "Broken" },
 ];
 
 const Dashboard: React.FC = () => {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
-  const [lokasiSelected, setLokasiSelected] = useState<string[]>([]);
-  const [projectSelected, setProjectSelected] = useState<string[]>([]);
-  const [jenisBarangSelected, setJenisBarangSelected] = useState<string[]>([]);
+  const [project, setProject] = useState("");
+  const [jenis, setJenis] = useState("");
   const [sortKey, setSortKey] = useState<string | undefined>(undefined);
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [page, setPage] = useState(1);
@@ -76,10 +86,13 @@ const Dashboard: React.FC = () => {
   const [filterOptions, setFilterOptions] =
     useState<FilterOptionsResponse>(EMPTY_FILTER_OPTIONS);
 
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<ItemFormData | null>(null);
+
   useEffect(() => {
     const controller = new AbortController();
     fetchFilterOptions(controller.signal)
-      .then(setFilterOptions)
+      .then((response) => setFilterOptions(response))
       .catch((err) => {
         // gagal memuat opsi filter bukan error fatal untuk seluruh halaman,
         // dropdown filter akan tampil kosong tapi tabel tetap bisa dipakai
@@ -91,15 +104,7 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    search,
-    status,
-    lokasiSelected,
-    projectSelected,
-    jenisBarangSelected,
-    sortKey,
-    sortDirection,
-  ]);
+  }, [search, status, project, jenis, sortKey, sortDirection]);
 
   const requestIdRef = useRef(0);
 
@@ -114,13 +119,12 @@ const Dashboard: React.FC = () => {
       {
         search,
         status,
-        lokasi: lokasiSelected,
-        project: projectSelected,
-        jenisBarang: jenisBarangSelected,
-        sortKey,
-        sortDirection,
+        proyek: project,
+        jenis: jenis,
+        sortBy: sortKey,
+        sortOrder: sortDirection,
         page,
-        pageSize: PAGE_SIZE,
+        limit: PAGE_SIZE,
       },
       controller.signal,
     )
@@ -142,9 +146,8 @@ const Dashboard: React.FC = () => {
   }, [
     search,
     status,
-    lokasiSelected,
-    projectSelected,
-    jenisBarangSelected,
+    project,
+    jenis,
     sortKey,
     sortDirection,
     page,
@@ -161,9 +164,71 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const rows = data?.rows ?? [];
-  const total = data?.total ?? 0;
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const handleAddClick = () => {
+    setSelectedItem(null);
+    setIsModalOpen(true);
+  };
+
+  const handleEditClick = (index: string) => {
+    const rawBackendData = data?.data.find((item) => item._id === index);
+    if (!rawBackendData) return;
+
+    // Transformasi data backend lewat Inventory API & Mapper contoh:
+    const formattedData = mapBackendToItemForm(rawBackendData);
+    setSelectedItem(formattedData);
+
+    setIsModalOpen(true);
+  };
+
+  const handleDeleteClick = (index: string) => {
+    if (
+      confirm("Are you sure you want to delete item with id " + index + "?")
+    ) {
+      handleDelete(index);
+    }
+  };
+
+  const handleDelete = async (index: string) => {
+    deleteItemAPI(index)
+      .then(() => {
+        setReloadToken((t) => t + 1);
+      })
+      .catch((err) => {
+        console.error("Failed to delete item:", err);
+        alert("Gagal menghapus item. Silakan coba lagi.");
+      });
+  };
+
+  const handleSubmit = async (formData: ItemFormData) => {
+    if (formData.id) {
+      const payload = mapItemFormToUpdateRequest(formData);
+      updateItem(formData.id, payload)
+        .then((res) => {
+          console.log("Item Updated:", res);
+          setReloadToken((t) => t + 1);
+        })
+        .catch((err) => {
+          console.error("Failed to update item:", err);
+          alert("Gagal memperbarui item. Silakan coba lagi.");
+        });
+    } else {
+      const payload = mapItemFormToCreateRequest(formData);
+      createItem(payload)
+        .then((res) => {
+          console.log("Item Created:", res);
+          setReloadToken((t) => t + 1);
+        })
+        .catch((err) => {
+          console.error("Failed to create item:", err);
+          alert("Gagal membuat item baru. Silakan coba lagi.");
+        });
+    }
+    setIsModalOpen(false);
+  };
+
+  const rows = data?.data ?? [];
+  const total = data?.meta.total ?? 0;
+  const pageCount = data?.meta.totalPages ?? 0;
 
   return (
     <MainLayout>
@@ -183,17 +248,15 @@ const Dashboard: React.FC = () => {
         <ControlRow
           onSearch={setSearch}
           status={status}
-          statusOptions={STATUS_OPTIONS}
+          statusOptions={filterOptions.data.status}
           onStatusChange={setStatus}
-          lokasiOptions={filterOptions.lokasi}
-          lokasiSelected={lokasiSelected}
-          onLokasiChange={setLokasiSelected}
-          projectOptions={filterOptions.project}
-          projectSelected={projectSelected}
-          onProjectChange={setProjectSelected}
-          jenisBarangOptions={filterOptions.jenisBarang}
-          jenisBarangSelected={jenisBarangSelected}
-          onJenisBarangChange={setJenisBarangSelected}
+          projectOptions={filterOptions.data.project}
+          projectSelected={project}
+          onProjectChange={setProject}
+          jenisOptions={filterOptions.data.jenis}
+          jenisSelected={jenis}
+          onJenisChange={setJenis}
+          onAddItem={handleAddClick}
         />
 
         {error ? (
@@ -221,6 +284,8 @@ const Dashboard: React.FC = () => {
               sortDirection={sortDirection}
               onSortChange={handleSort}
               loading={loading}
+              onEditClick={handleEditClick}
+              onDeleteClick={handleDeleteClick}
             />
 
             {total > 0 && (
@@ -237,6 +302,17 @@ const Dashboard: React.FC = () => {
           </>
         )}
       </Box>
+      <ItemFormModal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleSubmit}
+        initialData={selectedItem || undefined}
+        options={{
+          status: filterOptions.data.status,
+          proyek: filterOptions.data.project,
+          jenis: filterOptions.data.jenis,
+        }}
+      />
     </MainLayout>
   );
 };

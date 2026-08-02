@@ -61,6 +61,20 @@ func (r *ProjectRepository) GetByID(ctx context.Context, id string) (models.Proj
 	return project, nil
 }
 
+// GetByName returns a single project by exact (case-sensitive) namaProyek
+// match, or ErrNotFound.
+func (r *ProjectRepository) GetByName(ctx context.Context, namaProyek string) (models.Project, error) {
+	var project models.Project
+	err := r.coll.FindOne(ctx, bson.M{"namaProyek": namaProyek}).Decode(&project)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return models.Project{}, ErrNotFound
+	}
+	if err != nil {
+		return models.Project{}, err
+	}
+	return project, nil
+}
+
 // Exists reports whether a project with the given ID exists.
 func (r *ProjectRepository) Exists(ctx context.Context, id string) (bool, error) {
 	count, err := r.coll.CountDocuments(ctx, bson.M{"_id": id})

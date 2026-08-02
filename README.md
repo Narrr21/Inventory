@@ -30,14 +30,10 @@ git clone [https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git](https://github.c
 cd YOUR_REPO_NAME
 ```
 
-### 3. Environtment Variables
+### 3. Environment Variables
 
 ```bash
-# For Backend
 cp backend/.env.example backend/.env
-
-# For Frontend
-cp frontend/.env.example frontend/.env
 ```
 
 ## How to Run
@@ -46,19 +42,24 @@ cp frontend/.env.example frontend/.env
 
 Run this option if you want fast development cycles and hot-reloading without container overhead.
 
-#### 1. Run Backend (Go)
+#### 1. Start MongoDB
+
+The backend needs a reachable MongoDB instance before it will start. Either:
 
 ```bash
-cd backend
-go run main.go
+docker-compose up mongo
+# or: podman run -d --name inventory-mongo -p 27017:27017 mongo:7
+# or: your own local mongod
 ```
 
-- The backend API will be live at: http://localhost:8080
-- Test endpoint: http://localhost:8080/api/hello
+#### 2. Run the backend (Go)
 
-#### 1b. Run Backend Items API (Go)
-
-This is a separate entrypoint that serves the full `/api/v1/items` and `/api/v1/projects` contract (see `API_CONTRACT.md`) backed by a real MongoDB instance. It automatically loads `backend/.env` on startup (via [godotenv](https://github.com/joho/godotenv)) — make sure you've copied `backend/.env.example` to `backend/.env` (see step 3 above) with `MONGODB_URI` / `MONGODB_DB` set, and that a MongoDB instance is reachable (e.g. `docker-compose up mongo` or a local `mongod`). Already-exported environment variables still take precedence over `.env`.
+`backend/cmd/server` is the real entrypoint — it serves the full `/api/v1/items` /
+`/api/v1/projects` contract (see `docs/design/api-contract.md`) backed by MongoDB. It
+automatically loads `backend/.env` on startup (via [godotenv](https://github.com/joho/godotenv);
+already-exported environment variables still take precedence). `backend/main.go` at the repo
+root is an unrelated legacy Vercel demo handler (`/api/hello`) — not part of this API, don't use
+it to run the server.
 
 ```bash
 cd backend
@@ -66,7 +67,6 @@ go run ./cmd/server
 ```
 
 - The API will be live at: http://localhost:8080 (override with `PORT=<port> go run ./cmd/server`)
-- Test endpoint: http://localhost:8080/api/v1/items
 
 Every item references a project via `idProyek`, so an empty database has nothing valid to reference yet. Populate sample data first:
 
@@ -76,18 +76,28 @@ go run ./cmd/seed          # insert sample projects + items (additive)
 go run ./cmd/seed --reset  # wipe items/projects first, then insert
 ```
 
-Every route in `API_CONTRACT.md` can be hit with curl, e.g.:
+Every route in `docs/design/api-contract.md` can be hit with curl, e.g.:
 
 ```bash
 curl http://localhost:8080/api/v1/items
 curl http://localhost:8080/api/v1/items/507f191e810c19729de860ea
+
+# filter items by project — by id or by name, either works:
+curl "http://localhost:8080/api/v1/items?idProyek=<project _id>"
+curl "http://localhost:8080/api/v1/items?namaProyek=ALPHA"
+
+# dropdown data (jenis, status, and the full project list) in one call:
+curl http://localhost:8080/api/v1/items/filter-options
 
 # or create your own project + item:
 curl -X POST http://localhost:8080/api/v1/projects -H "Content-Type: application/json" -d '{"namaProyek":"ALPHA","lokasi":"Jakarta HQ"}'
 curl -X POST http://localhost:8080/api/v1/items -H "Content-Type: application/json" -d '{"jenis":"Laptop","serialNumber":"SN-00123","nama":"RTI-ALPHA-005","status":"Healthy","idProyek":"<_id from the project response above>"}'
 ```
 
-#### 2. Run Frontend (React + Vite)
+Every Item response (create/list/get/update) also carries a read-only `namaProyek`, resolved
+server-side from `idProyek` — no separate `/projects` lookup needed just to display it.
+
+#### 3. Run Frontend (React + Vite)
 
 ```bash
 cd frontend

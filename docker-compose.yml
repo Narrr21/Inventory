@@ -26,6 +26,19 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+  
+  seeder:
+    image: golang:1.24-alpine
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017
+      - MONGODB_DB=rti_inventory
+    command: go run ./cmd/seed --reset
+    depends_on:
+      mongo:
+        condition: service_healthy
 
   frontend:
     build:

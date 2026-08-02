@@ -14,7 +14,7 @@ export interface StatusOption {
 
 interface StatusFilterProps {
   value: string;
-  options: StatusOption[];
+  options: string[];
   onChange: (value: string) => void;
   label?: string;
 }
@@ -38,9 +38,9 @@ const StatusFilter: React.FC<StatusFilterProps> = ({
         inputProps={{ "aria-label": "status filter" }}
       >
         <MenuItem value="">Semua</MenuItem>
-        {options.map((opt) => (
-          <MenuItem key={opt.value} value={opt.value}>
-            {opt.label}
+        {options.map((option) => (
+          <MenuItem key={option} value={option}>
+            {option}
           </MenuItem>
         ))}
       </Select>
