@@ -1,4 +1,3 @@
-import React from "react";
 import {
   Box,
   LinearProgress,
@@ -11,23 +10,26 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import type { ColumnDef, SortDirection } from "../../types/dashboard";
-import type { BackendItem } from "../../types/dashboard";
 
-interface DataTableProps {
+type RowWithId = {
+  _id: string;
+};
+
+interface DataTableProps<T extends RowWithId = RowWithId> {
   columns: ColumnDef[];
-  rows: BackendItem[];
+  rows: T[];
   sortKey?: string;
   sortDirection: SortDirection;
   onSortChange: (col: ColumnDef) => void;
   loading?: boolean;
-  onEditClick: (id: string) => void;
-  onDeleteClick: (id: string) => void;
+  onEditClick?: (id: string) => void;
+  onDeleteClick?: (id: string) => void;
 }
 
 const DEFAULT_COLUMN_WIDTH = 160;
 const TOOLTIP_THRESHOLD = 24;
 
-const DataTable: React.FC<DataTableProps> = ({
+const DataTable = <T extends RowWithId>({
   columns,
   rows,
   sortKey,
@@ -36,7 +38,9 @@ const DataTable: React.FC<DataTableProps> = ({
   loading = false,
   onEditClick,
   onDeleteClick,
-}) => {
+}: DataTableProps<T>) => {
+  const hasRowActions = Boolean(onEditClick || onDeleteClick);
+
   return (
     <Box
       role="region"
@@ -131,26 +135,27 @@ const DataTable: React.FC<DataTableProps> = ({
         >
           {rows.map((row) => (
             <Box
-              key={row._id} // Menggunakan _id unik daripada indeks array
+              key={row._id}
               role="row"
               sx={{
                 display: "flex",
                 borderBottom: "1px solid",
                 borderColor: "divider",
-                cursor: "pointer",
+                cursor: onEditClick ? "pointer" : "default",
                 "&:last-of-type": { borderBottom: "none" },
-                "&:hover": { bgcolor: "action.hover" },
+                ...(onEditClick
+                  ? { "&:hover": { bgcolor: "action.hover" } }
+                  : {}),
               }}
-              onClick={() => onEditClick(row._id)}
+              onClick={onEditClick ? () => onEditClick(row._id) : undefined}
             >
               {columns.map((col) => {
-                // KELOLA KOLOM ACTIONS KECUALI
-                if (col.key === "actions") {
+                if (col.key === "actions" && hasRowActions) {
                   return (
                     <Box
                       key={col.key}
                       role="cell"
-                      onClick={(e) => e.stopPropagation()} // Mencegah pemicu row onClick
+                      onClick={(e) => e.stopPropagation()}
                       sx={{
                         width: col.width ?? DEFAULT_COLUMN_WIDTH,
                         flex: `0 0 ${col.width ?? DEFAULT_COLUMN_WIDTH}px`,
@@ -166,8 +171,8 @@ const DataTable: React.FC<DataTableProps> = ({
                         aria-label="edit item"
                         onClick={(e) => {
                           e.stopPropagation();
-                          e.currentTarget.blur(); // Lepas fokus dari tombol sebelum modal terbuka
-                          onEditClick(row._id);
+                          e.currentTarget.blur();
+                          onEditClick?.(row._id);
                         }}
                       >
                         <EditIcon fontSize="small" />
@@ -177,8 +182,8 @@ const DataTable: React.FC<DataTableProps> = ({
                         aria-label="delete item"
                         onClick={(e) => {
                           e.stopPropagation();
-                          e.currentTarget.blur(); // Lepas fokus dari tombol sebelum modal delete/konfirmasi terbuka
-                          onDeleteClick(row._id);
+                          e.currentTarget.blur();
+                          onDeleteClick?.(row._id);
                         }}
                         sx={{
                           color: "error.main",
@@ -195,8 +200,11 @@ const DataTable: React.FC<DataTableProps> = ({
                   );
                 }
 
-                // KOLOM REGULER (DATA)
-                const value = row[col.key as keyof BackendItem];
+                if (col.key === "actions") {
+                  return null;
+                }
+
+                const value = (row as Record<string, unknown>)[col.key];
                 const text =
                   value === undefined || value === null ? "" : String(value);
 

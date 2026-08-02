@@ -1,5 +1,11 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Dashboard from './Dashboard/Dashboard';
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
+import Dashboard from "./Dashboard/Dashboard";
+import ProjectPage from "./Dashboard/Project";
 
 function App() {
   return (
@@ -9,7 +15,10 @@ function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />}></Route>
 
         {/* DASHBOARD PAGE */}
-        <Route path='/dashboard' element={<Dashboard />}></Route>
+        <Route path="/dashboard" element={<Dashboard />}></Route>
+
+        {/* PROJECT PAGE */}
+        <Route path="/project" element={<ProjectPage />}></Route>
       </Routes>
     </Router>
   );

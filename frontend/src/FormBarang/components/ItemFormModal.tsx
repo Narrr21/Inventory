@@ -2,10 +2,17 @@ import React, { useEffect, useState } from "react";
 import { Box } from "@mui/material";
 import { BaseForm } from "./BaseForm";
 import { BaseRow } from "./BaseRow";
+import { BaseAutocomplete } from "./BaseAutocomplete";
 import { BaseDropdown } from "./BaseDropdown";
 import { BaseSection } from "./BaseSection";
 import type { FieldInfo, ItemFormData } from "../../types/form";
 import type { Project } from "../../types/dashboard";
+import { useDebounce } from "../../Dashboard/hooks/useDebounce";
+import {
+  addJenisSuggestion,
+  deleteJenisSuggestion,
+  fetchJenisSuggestions,
+} from "../../api/InventoryAPI";
 
 interface ItemFormModalProps {
   open: boolean;
@@ -46,17 +53,53 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
   options,
 }) => {
   const [formData, setFormData] = useState<ItemFormData>(DEFAULT_FORM);
+  const [jenisInput, setJenisInput] = useState("");
+  const [jenisSuggestions, setJenisSuggestions] = useState<string[]>(
+    options.jenis,
+  );
+  const [isJenisLoading, setIsJenisLoading] = useState(false);
   const isEdit = Boolean(initialData?.id);
+  const debouncedJenisInput = useDebounce(jenisInput, 250);
 
   useEffect(() => {
     if (initialData) {
       // Backend mapping transform -> Frontend format
       setFormData(initialData);
+      setJenisInput(initialData.jenis || "");
       console.log("Initial Data:", initialData);
     } else {
       setFormData(DEFAULT_FORM);
+      setJenisInput("");
     }
   }, [initialData, open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const query = debouncedJenisInput.trim();
+
+    setIsJenisLoading(true);
+
+    fetchJenisSuggestions(query, controller.signal)
+      .then((response) => {
+        setJenisSuggestions(response.data);
+      })
+      .catch((error) => {
+        if (error?.name !== "AbortError") {
+          setJenisSuggestions(options.jenis);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsJenisLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [debouncedJenisInput, open, options.jenis]);
 
   useEffect(() => {
     if (formData.proyek) {
@@ -107,6 +150,36 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
     }));
   };
 
+  const handleCreateJenis = async (value: string) => {
+    const nextValue = value.trim();
+
+    if (!nextValue) {
+      return;
+    }
+
+    const response = await addJenisSuggestion(nextValue);
+    setJenisSuggestions(response.data);
+    setJenisInput(nextValue);
+    setFormData((prev) => ({ ...prev, jenis: nextValue }));
+  };
+
+  const handleDeleteJenis = async (value: string) => {
+    const confirmed = window.confirm(`Hapus jenis "${value}" dari suggestion?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    const response = await deleteJenisSuggestion(value);
+    setJenisSuggestions(response.data);
+
+    setFormData((prev) =>
+      prev.jenis === value ? { ...prev, jenis: "" } : prev,
+    );
+
+    setJenisInput((prev) => (prev === value ? "" : prev));
+  };
+
   return (
     <BaseForm
       open={open}
@@ -138,9 +211,7 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
         <BaseRow
           label="License Office"
           value={formData.licenseOffice}
-          onChange={(val) =>
-            setFormData((p) => ({ ...p, licenseOffice: val }))
-          }
+          onChange={(val) => setFormData((p) => ({ ...p, licenseOffice: val }))}
         />
       </Box>
 
@@ -155,11 +226,21 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
           />
         </Box>
         <Box sx={{ width: { xs: "100%", lg: "48%" } }}>
-          <BaseDropdown
+          <BaseAutocomplete
             label="Jenis"
             value={formData.jenis}
-            options={options.jenis}
-            onChange={(val) => setFormData((p) => ({ ...p, jenis: val }))}
+            inputValue={jenisInput}
+            options={jenisSuggestions}
+            onValueChange={(val) => setFormData((p) => ({ ...p, jenis: val }))}
+            onInputChange={(val) => {
+              setJenisInput(val);
+              setFormData((p) => ({ ...p, jenis: val }));
+            }}
+            onCreateOption={handleCreateJenis}
+            onDeleteOption={handleDeleteJenis}
+            placeholder="Ketik atau pilih jenis"
+            helperText="Pilih suggestion yang tersedia atau ketik jenis baru. Jika tidak ada yang cocok, pilih Tambahkan ke database."
+            loading={isJenisLoading}
           />
         </Box>
         <Box sx={{ width: { xs: "100%", lg: "48%" } }}>

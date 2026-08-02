@@ -31,6 +31,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   // Cek apakah halaman aktif adalah /dashboard
   const isDashboardActive = location.pathname === "/dashboard";
+  const isProjectActive = location.pathname === "/project";
   const isAnalyticActive = location.pathname === "/analytic";
 
   return (
@@ -95,12 +96,32 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                     : "text.primary",
                   bgcolor: isDashboardActive ? "primary.dark" : "transparent",
                   fontWeight: isDashboardActive ? 600 : 400,
-                  "&:hover": isDashboardActive ? {} : {
-                    bgcolor: "action.hover",
-                  },
+                  "&:hover": isDashboardActive
+                    ? {}
+                    : {
+                        bgcolor: "action.hover",
+                      },
                 }}
               >
                 Dashboard
+              </Button>
+              <Button
+                component={Link}
+                to="/project"
+                sx={{
+                  color: isProjectActive
+                    ? "primary.contrastText"
+                    : "text.primary",
+                  bgcolor: isProjectActive ? "primary.dark" : "transparent",
+                  fontWeight: isProjectActive ? 600 : 400,
+                  "&:hover": isProjectActive
+                    ? {}
+                    : {
+                        bgcolor: "action.hover",
+                      },
+                }}
+              >
+                Project
               </Button>
               <Button
                 component={Link}
@@ -111,9 +132,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                     : "text.primary",
                   bgcolor: isAnalyticActive ? "primary.dark" : "transparent",
                   fontWeight: isAnalyticActive ? 600 : 500,
-                  "&:hover": isAnalyticActive ? {} : {
-                    bgcolor: "action.hover",
-                  },
+                  "&:hover": isAnalyticActive
+                    ? {}
+                    : {
+                        bgcolor: "action.hover",
+                      },
                 }}
               >
                 Analytic
