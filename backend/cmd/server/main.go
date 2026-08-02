@@ -40,10 +40,12 @@ func main() {
 
 	itemRepo := repository.NewItemRepository(client.Database)
 	projectRepo := repository.NewProjectRepository(client.Database)
+	itemTypeRepo := repository.NewItemTypeRepository(client.Database)
 	itemHandler := handlers.NewItemHandler(itemRepo, projectRepo)
 	projectHandler := handlers.NewProjectHandler(projectRepo)
+	itemTypeHandler := handlers.NewItemTypeHandler(itemTypeRepo)
 	inventoryHandler := handlers.NewInventoryCompatHandler(itemRepo, projectRepo)
-	router := handlers.NewRouter(itemHandler, projectHandler, inventoryHandler)
+	router := handlers.NewRouter(itemHandler, projectHandler, itemTypeHandler, inventoryHandler)
 
 	port := os.Getenv("PORT")
 	if port == "" {

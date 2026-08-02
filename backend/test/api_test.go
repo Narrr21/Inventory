@@ -47,18 +47,24 @@ func setupBackendAPI(t *testing.T) string {
 
 	itemsColl := client.Database.Collection("items")
 	projectsColl := client.Database.Collection("projects")
+	itemTypesColl := client.Database.Collection("itemTypes")
 	if _, err := itemsColl.DeleteMany(context.Background(), map[string]interface{}{}); err != nil {
 		t.Fatalf("failed to clean items collection: %v", err)
 	}
 	if _, err := projectsColl.DeleteMany(context.Background(), map[string]interface{}{}); err != nil {
 		t.Fatalf("failed to clean projects collection: %v", err)
 	}
+	if _, err := itemTypesColl.DeleteMany(context.Background(), map[string]interface{}{}); err != nil {
+		t.Fatalf("failed to clean itemTypes collection: %v", err)
+	}
 
 	itemRepo := repository.NewItemRepository(client.Database)
 	projectRepo := repository.NewProjectRepository(client.Database)
+	itemTypeRepo := repository.NewItemTypeRepository(client.Database)
 	router := handlers.NewRouter(
 		handlers.NewItemHandler(itemRepo, projectRepo),
 		handlers.NewProjectHandler(projectRepo),
+		handlers.NewItemTypeHandler(itemTypeRepo),
 		handlers.NewInventoryCompatHandler(itemRepo, projectRepo),
 	)
 	server := httptest.NewServer(router)
@@ -67,6 +73,7 @@ func setupBackendAPI(t *testing.T) string {
 		server.Close()
 		_, _ = itemsColl.DeleteMany(context.Background(), map[string]interface{}{})
 		_, _ = projectsColl.DeleteMany(context.Background(), map[string]interface{}{})
+		_, _ = itemTypesColl.DeleteMany(context.Background(), map[string]interface{}{})
 		_ = db.Disconnect(context.Background(), client)
 	})
 
@@ -144,6 +151,15 @@ func createProject(t *testing.T, baseURL string, overrides map[string]interface{
 	status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/projects", body)
 	if status != http.StatusCreated {
 		t.Fatalf("create project: status = %d, body = %+v", status, env)
+	}
+	return env["data"].(map[string]interface{})
+}
+
+func createItemType(t *testing.T, baseURL string, jenis string) map[string]interface{} {
+	t.Helper()
+	status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/item-types", map[string]interface{}{"jenis": jenis})
+	if status != http.StatusCreated {
+		t.Fatalf("create item type: status = %d, body = %+v", status, env)
 	}
 	return env["data"].(map[string]interface{})
 }
@@ -975,6 +991,121 @@ func TestProjectsNamaProyekUniqueness(t *testing.T) {
 		})
 		if status != http.StatusOK {
 			t.Fatalf("re-submitting own unchanged name should not be treated as duplicate: status = %d, body = %+v", status, env)
+		}
+	})
+}
+
+// TestItemTypesLifecycle exercises api-contract.md §Jenis Barang: Create/
+// List/Delete for the item-types master data collection, its
+// case-insensitive uniqueness (unlike namaProyek), and that deleting one
+// never touches items still using that jenis string (no FK).
+func TestItemTypesLifecycle(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+
+	t.Run("CreateAndList", func(t *testing.T) {
+		createItemType(t, baseURL, "Drone")
+
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/item-types", nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].([]interface{})
+		found := false
+		for _, raw := range data {
+			if raw.(map[string]interface{})["jenis"] == "Drone" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected Drone in list, got %+v", data)
+		}
+	})
+
+	t.Run("CreateBlankRejected", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/item-types", map[string]interface{}{"jenis": "   "})
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want 422, body = %+v", status, env)
+		}
+		errObj := env["error"].(map[string]interface{})
+		fields := errObj["fields"].(map[string]interface{})
+		if _, ok := fields["jenis"]; !ok {
+			t.Errorf("expected error.fields.jenis, got %+v", fields)
+		}
+	})
+
+	t.Run("CreateDuplicateRejected", func(t *testing.T) {
+		createItemType(t, baseURL, "Printer")
+
+		status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/item-types", map[string]interface{}{"jenis": "Printer"})
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want 422, body = %+v", status, env)
+		}
+	})
+
+	t.Run("CreateDuplicateCaseInsensitiveRejected", func(t *testing.T) {
+		createItemType(t, baseURL, "Scanner")
+
+		status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/item-types", map[string]interface{}{"jenis": "scanner"})
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("case-insensitive uniqueness should reject differently-cased duplicate: status = %d, body = %+v", status, env)
+		}
+	})
+
+	t.Run("DeleteRemovesFromList", func(t *testing.T) {
+		created := createItemType(t, baseURL, "Router")
+		id := created["_id"].(string)
+
+		status, env := apiRequest(t, baseURL, http.MethodDelete, "/api/v1/item-types/"+id, nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+
+		_, listEnv := apiRequest(t, baseURL, http.MethodGet, "/api/v1/item-types", nil)
+		for _, raw := range listEnv["data"].([]interface{}) {
+			if raw.(map[string]interface{})["_id"] == id {
+				t.Errorf("expected %s to be removed from list after delete", id)
+			}
+		}
+	})
+
+	t.Run("DeleteNotFound", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodDelete, "/api/v1/item-types/000000000000000000000000", nil)
+		if status != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404, body = %+v", status, env)
+		}
+	})
+
+	t.Run("DeleteNotBlockedByReferencingItem", func(t *testing.T) {
+		createItemType(t, baseURL, "Tablet")
+		item := createItem(t, baseURL, map[string]interface{}{"jenis": "Tablet"})
+
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/item-types", nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		var tabletID string
+		for _, raw := range env["data"].([]interface{}) {
+			row := raw.(map[string]interface{})
+			if row["jenis"] == "Tablet" {
+				tabletID = row["_id"].(string)
+			}
+		}
+		if tabletID == "" {
+			t.Fatalf("expected Tablet item type to exist")
+		}
+
+		status, env = apiRequest(t, baseURL, http.MethodDelete, "/api/v1/item-types/"+tabletID, nil)
+		if status != http.StatusOK {
+			t.Fatalf("delete should not be blocked by referencing item: status = %d, body = %+v", status, env)
+		}
+
+		status, env = apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/"+item["_id"].(string), nil)
+		if status != http.StatusOK {
+			t.Fatalf("item should be unaffected by item-type deletion: status = %d, body = %+v", status, env)
+		}
+		data := env["data"].(map[string]interface{})
+		if data["jenis"] != "Tablet" {
+			t.Errorf("item.jenis = %v, want unchanged Tablet", data["jenis"])
 		}
 	})
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/go-chi/cors"
 )
 
-func NewRouter(items *ItemHandler, projects *ProjectHandler, inventory *InventoryCompatHandler) chi.Router {
+func NewRouter(items *ItemHandler, projects *ProjectHandler, itemTypes *ItemTypeHandler, inventory *InventoryCompatHandler) chi.Router {
 	r := chi.NewRouter()
 	r.Use(middleware.Timeout(10 * time.Second))
 	r.Use(cors.Handler(cors.Options{
@@ -38,6 +38,12 @@ func NewRouter(items *ItemHandler, projects *ProjectHandler, inventory *Inventor
 		r.Get("/{id}", projects.GetProject)
 		r.Patch("/{id}", projects.UpdateProject)
 		r.Delete("/{id}", projects.DeleteProject)
+	})
+
+	r.Route("/api/v1/item-types", func(r chi.Router) {
+		r.Post("/", itemTypes.CreateItemType)
+		r.Get("/", itemTypes.ListItemTypes)
+		r.Delete("/{id}", itemTypes.DeleteItemType)
 	})
 
 	r.Route("/api/inventory", func(r chi.Router) {
