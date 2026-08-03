@@ -33,11 +33,15 @@ var seedProjects = []models.Project{
 
 // seedItemTypes mirrors the jenis values used by seedItemsFor, so the
 // item-types suggestion list isn't empty on a fresh dev database.
+// "Lainnya" is the fallback every item is reassigned to when its type is
+// deleted (handlers.DefaultJenis); seeding it keeps the dev dropdown honest
+// about that even before any delete has happened.
 var seedItemTypes = []models.ItemType{
 	{Jenis: "Laptop"},
 	{Jenis: "PC"},
 	{Jenis: "Monitor"},
 	{Jenis: "Server"},
+	{Jenis: "Lainnya"},
 }
 
 // seedItemsFor builds sample items referencing the given project IDs (keyed
