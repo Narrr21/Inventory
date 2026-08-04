@@ -46,3 +46,8 @@ export interface Project {
   namaProyek: string;
   lokasi: string;
 }
+
+export interface Jenis {
+  _id: string;
+  jenis: string;
+}

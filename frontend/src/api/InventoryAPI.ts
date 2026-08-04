@@ -1,7 +1,9 @@
-import type { SortDirection, BackendItem, Project } from "../types/dashboard";
-
-const USE_MOCK = true;
-// Note: Dapat menghapus USE_MOCK dan logic MOCK dibawah jika backend selesai
+import type {
+  SortDirection,
+  BackendItem,
+  Project,
+  Jenis,
+} from "../types/dashboard";
 
 export interface InventoryQueryParams {
   jenis?: string;
@@ -29,7 +31,7 @@ export interface FilterOptionsResponse {
   success: boolean;
   data: {
     project: Project[];
-    jenis: string[];
+    jenis: Jenis[];
     status: string[];
   };
 }
@@ -41,294 +43,48 @@ export interface ListOfProjectsResponse {
 
 export interface JenisSuggestionsResponse {
   success: boolean;
-  data: string[];
+  data: Jenis[];
 }
 
-export interface JenisMutationResponse {
+export interface AddJenisResponse {
   success: boolean;
-  data: string[];
+  data: Jenis[];
 }
-
-export interface ProjectMutationResponse {
+export interface DeleteJenisResponse {
   success: boolean;
-  data: Project[];
-}
-
-export interface ProjectCreateRequest {
-  name: string;
-  location: string;
-}
-
-export interface ProjectUpdateRequest {
-  name: string;
-  location: string;
-}
-
-// MOCK
-
-const PROJECT_POOL = [
-  "Migrasi Sistem",
-  "Renovasi Kantor",
-  "Ruang Meeting",
-  "Ekspansi Cabang",
-];
-const PROJECT_STORE: Project[] = PROJECT_POOL.map((namaProyek, index) => ({
-  _id: `project-${index + 1}`,
-  namaProyek,
-  lokasi: `Lokasi ${index + 1}`,
-}));
-const INITIAL_JENIS_POOL = [
-  "Elektronik",
-  "Furnitur",
-  "Aksesoris",
-  "Alat Tulis",
-];
-const STATUS_POOL = ["Healthy", "Under Maintenance", "Broken"];
-const NAMA_POOL = [
-  "Laptop Dell XPS 13",
-  "Meja Kerja Standing Desk Elektrik",
-  "Proyektor Epson EB-X05",
-  "Kabel HDMI 10 Meter",
-  "Kursi Ergonomis Herman Miller",
-  'Monitor LG UltraWide 34"',
-  "Printer HP LaserJet Pro",
-  "Rak Server 42U",
-  "Whiteboard Magnetik 120x90",
-  "Router Mikrotik CCR2004",
-  "Switch 24 Port Gigabit",
-  "Lemari Arsip Besi",
-];
-
-const MOCK_DB: BackendItem[] = Array.from({ length: 200 }, (_, i) => ({
-  _id: `item-${i + 1}`,
-  nama: NAMA_POOL[i % NAMA_POOL.length],
-  serialNumber: `SN-${1000 + i}`,
-  licenseWindows: `WIN-${2000 + i}`,
-  licenseOffice: `OFFICE-${3000 + i}`,
-  status: STATUS_POOL[i % STATUS_POOL.length],
-  jenis: INITIAL_JENIS_POOL[i % INITIAL_JENIS_POOL.length],
-  idProyek: `project-${(i % PROJECT_POOL.length) + 1}`,
-  namaProyek: PROJECT_POOL[i % PROJECT_POOL.length],
-  createdAt: new Date(Date.now() - i * 1000 * 60 * 60 * 24).toISOString(),
-  updatedAt: new Date(Date.now() - i * 1000 * 60 * 60 * 24).toISOString(),
-  credentials: {
-    username: `user${i + 1}`,
-    password: `pass${i + 1}`,
-  },
-  remoteInfo: {
-    ip_address: `192.168.1.${i + 1}`,
-    mac_address: `00:1A:2B:3C:4D:${(i + 1).toString(16).padStart(2, "0")}`,
-  },
-  customAttributes: {
-    notes: `Catatan untuk item ${i + 1}`,
-  },
-}));
-
-const jenisStore = new Set(INITIAL_JENIS_POOL);
-
-const getSortedJenisPool = (): string[] =>
-  Array.from(jenisStore).sort((a, b) => a.localeCompare(b));
-
-const normalizeJenis = (value: string): string => value.trim();
-
-const normalizeProjectValue = (value: string): string => value.trim();
-
-const NETWORK_DELAY_MS = 350;
-
-const simulateNetwork = <T>(value: T, signal?: AbortSignal): Promise<T> =>
-  new Promise((resolve, reject) => {
-    const timer = setTimeout(() => resolve(value), NETWORK_DELAY_MS);
-    signal?.addEventListener("abort", () => {
-      clearTimeout(timer);
-      reject(new DOMException("Aborted", "AbortError"));
-    });
-  });
-
-async function fetchInventoryMock(
-  params: InventoryQueryParams,
-  signal?: AbortSignal,
-): Promise<InventoryResponse> {
-  let rows = MOCK_DB.filter((row) => {
-    const matchesSearch =
-      params.search === "" ||
-      row.nama.toLowerCase().includes(params.search?.toLowerCase() ?? "") ||
-      row.serialNumber
-        .toLowerCase()
-        .includes(params.search?.toLowerCase() ?? "");
-    const matchesStatus = params.status === "" || row.status === params.status;
-    const matchesProject =
-      params.proyek === "" || row.namaProyek === params.proyek;
-    const matchesJenis = params.jenis === "" || row.jenis === params.jenis;
-    return matchesSearch && matchesStatus && matchesProject && matchesJenis;
-  });
-
-  if (params.sortBy) {
-    const key = params.sortBy;
-    rows = [...rows].sort((a, b) => {
-      const av = String(a[key as keyof BackendItem] ?? "").toLowerCase();
-      const bv = String(b[key as keyof BackendItem] ?? "").toLowerCase();
-      if (av === "" && bv !== "") return params.sortOrder === "asc" ? 1 : -1;
-      if (av === bv) return 0;
-      const result = av > bv ? 1 : -1;
-      return params.sortOrder === "asc" ? result : -result;
-    });
-  }
-
-  const total = rows.length;
-  const start = (params.page - 1) * params.limit;
-  const paged = rows.slice(start, start + params.limit);
-
-  return simulateNetwork(
-    {
-      success: true,
-      data: paged,
-      meta: {
-        total,
-        page: params.page,
-        limit: params.limit,
-        totalPages: Math.ceil(total / params.limit),
-      },
-    },
-    signal,
-  );
-}
-
-async function fetchFilterOptionsMock(
-  signal?: AbortSignal,
-): Promise<FilterOptionsResponse> {
-  return simulateNetwork(
-    {
-      success: true,
-      data: {
-        project: PROJECT_STORE,
-        jenis: getSortedJenisPool(),
-        status: STATUS_POOL,
-      },
-    },
-    signal,
-  );
-}
-
-async function fetchListOfProjectsMock(
-  signal?: AbortSignal,
-): Promise<ListOfProjectsResponse> {
-  return simulateNetwork(
-    {
-      success: true,
-      data: PROJECT_STORE,
-    },
-    signal,
-  );
-}
-
-async function createProjectMock(
-  payload: ProjectCreateRequest,
-  signal?: AbortSignal,
-): Promise<ProjectMutationResponse> {
-  const name = normalizeProjectValue(payload.name);
-  const location = normalizeProjectValue(payload.location);
-
-  if (!name) {
-    throw new Error("Nama project tidak boleh kosong");
-  }
-
-  const newProject: Project = {
-    _id: `project-${Date.now()}`,
-    namaProyek: name,
-    lokasi: location || "-",
+  data: {
+    _id: string;
+    jenis: string;
+    defaultJenis: string;
+    reassignedItems: number;
   };
-
-  PROJECT_STORE.unshift(newProject);
-
-  window.alert(`Project "${name}" berhasil ditambahkan ke database mock.`);
-
-  return simulateNetwork(
-    {
-      success: true,
-      data: PROJECT_STORE,
-    },
-    signal,
-  );
 }
 
-async function updateProjectMock(
-  id: string,
-  payload: ProjectUpdateRequest,
-  signal?: AbortSignal,
-): Promise<ProjectMutationResponse> {
-  const name = normalizeProjectValue(payload.name);
-  const location = normalizeProjectValue(payload.location);
-
-  if (!name) {
-    throw new Error("Nama project tidak boleh kosong");
-  }
-
-  const targetIndex = PROJECT_STORE.findIndex((project) => project._id === id);
-
-  if (targetIndex === -1) {
-    throw new Error("Project tidak ditemukan");
-  }
-
-  PROJECT_STORE[targetIndex] = {
-    ...PROJECT_STORE[targetIndex],
-    namaProyek: name,
-    lokasi: location || "-",
+export interface DeleteProjectResponse {
+  success: boolean;
+  data: {
+    _id: string;
   };
-
-  window.alert(`Project "${name}" berhasil diperbarui di database mock.`);
-
-  return simulateNetwork(
-    {
-      success: true,
-      data: PROJECT_STORE,
-    },
-    signal,
-  );
 }
 
-async function deleteProjectMock(
-  id: string,
-  signal?: AbortSignal,
-): Promise<ProjectMutationResponse> {
-  const targetIndex = PROJECT_STORE.findIndex((project) => project._id === id);
-
-  if (targetIndex === -1) {
-    throw new Error("Project tidak ditemukan");
-  }
-
-  const [deletedProject] = PROJECT_STORE.splice(targetIndex, 1);
-
-  window.alert(
-    `Project "${deletedProject.namaProyek}" berhasil dihapus dari database mock.`,
-  );
-
-  return simulateNetwork(
-    {
-      success: true,
-      data: PROJECT_STORE,
-    },
-    signal,
-  );
+export interface CreateProjectRequest {
+  namaProyek: string;
+  lokasi: string;
 }
 
-async function fetchJenisSuggestionsMock(
-  query: string,
-  signal?: AbortSignal,
-): Promise<JenisSuggestionsResponse> {
-  const normalizedQuery = query.trim().toLowerCase();
-  const currentJenisPool = getSortedJenisPool();
+export interface CreateProjectResponse {
+  success: boolean;
+  data: Project;
+}
 
-  const suggestions = currentJenisPool.filter((jenis) =>
-    jenis.toLowerCase().includes(normalizedQuery),
-  );
+export interface UpdateProjectRequest {
+  namaProyek?: string;
+  lokasi?: string;
+}
 
-  return simulateNetwork(
-    {
-      success: true,
-      data: suggestions,
-    },
-    signal,
-  );
+export interface UpdateProjectResponse {
+  success: boolean;
+  data: Project;
 }
 
 // API
@@ -356,29 +112,29 @@ async function fetchFilterOptionsApi(
 ): Promise<FilterOptionsResponse> {
   const res = await fetch("/api/v1/items/filter-options", { signal });
   if (!res.ok) throw new Error("Gagal mengambil opsi filter");
-  return (await res.json()) as FilterOptionsResponse;
+  const jenisData = await fetch("/api/v1/item-types", { signal });
+  const jenisOptions = (await jenisData.json()).data;
+  return {
+    success: true,
+    data: {
+      ...((await res.json()).data as any),
+      jenis: jenisOptions,
+    },
+  } as FilterOptionsResponse;
 }
 
 export async function fetchListOfProjects(
   signal?: AbortSignal,
 ): Promise<ListOfProjectsResponse> {
-  if (USE_MOCK) {
-    return fetchListOfProjectsMock(signal);
-  }
-
   const res = await fetch("/api/v1/projects", { signal });
   if (!res.ok) throw new Error("Gagal mengambil opsi proyek");
   return (await res.json()) as ListOfProjectsResponse;
 }
 
 export async function createProject(
-  payload: ProjectCreateRequest,
+  payload: CreateProjectRequest,
   signal?: AbortSignal,
-): Promise<ProjectMutationResponse> {
-  if (USE_MOCK) {
-    return createProjectMock(payload, signal);
-  }
-
+): Promise<CreateProjectResponse> {
   const res = await fetch("/api/v1/projects", {
     method: "POST",
     headers: {
@@ -389,18 +145,14 @@ export async function createProject(
   });
 
   if (!res.ok) throw new Error("Gagal membuat project baru");
-  return (await res.json()) as ProjectMutationResponse;
+  return (await res.json()) as CreateProjectResponse;
 }
 
 export async function updateProject(
   id: string,
-  payload: ProjectUpdateRequest,
+  payload: UpdateProjectRequest,
   signal?: AbortSignal,
-): Promise<ProjectMutationResponse> {
-  if (USE_MOCK) {
-    return updateProjectMock(id, payload, signal);
-  }
-
+): Promise<UpdateProjectResponse> {
   const res = await fetch(`/api/v1/projects/${id}`, {
     method: "PATCH",
     headers: {
@@ -411,24 +163,20 @@ export async function updateProject(
   });
 
   if (!res.ok) throw new Error("Gagal meng-update project");
-  return (await res.json()) as ProjectMutationResponse;
+  return (await res.json()) as UpdateProjectResponse;
 }
 
 export async function deleteProject(
   id: string,
   signal?: AbortSignal,
-): Promise<ProjectMutationResponse> {
-  if (USE_MOCK) {
-    return deleteProjectMock(id, signal);
-  }
-
+): Promise<DeleteProjectResponse> {
   const res = await fetch(`/api/v1/projects/${id}`, {
     method: "DELETE",
     signal,
   });
 
   if (!res.ok) throw new Error("Gagal menghapus project");
-  return (await res.json()) as ProjectMutationResponse;
+  return (await res.json()) as DeleteProjectResponse;
 }
 
 async function fetchJenisSuggestionsApi(
@@ -438,7 +186,7 @@ async function fetchJenisSuggestionsApi(
   const qs = new URLSearchParams();
   if (query.trim()) qs.append("q", query.trim());
 
-  const res = await fetch(`/api/v1/items/jenis-suggestions?${qs.toString()}`, {
+  const res = await fetch(`/api/v1/item-types?${qs.toString()}`, {
     signal,
   });
 
@@ -449,51 +197,30 @@ async function fetchJenisSuggestionsApi(
 export async function addJenisSuggestion(
   jenis: string,
   signal?: AbortSignal,
-): Promise<JenisMutationResponse> {
-  const normalizedJenis = normalizeJenis(jenis);
-
-  if (!normalizedJenis) {
-    throw new Error("Jenis tidak boleh kosong");
-  }
-
-  jenisStore.add(normalizedJenis);
-
-  window.alert(
-    `Jenis "${normalizedJenis}" berhasil ditambahkan ke database mock.`,
-  );
-
-  return simulateNetwork(
-    {
-      success: true,
-      data: getSortedJenisPool(),
+): Promise<AddJenisResponse> {
+  const res = await fetch("/api/v1/item-types", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
     },
+    body: JSON.stringify({ jenis }),
     signal,
-  );
+  });
+  if (!res.ok) throw new Error("Gagal menambahkan suggestion jenis");
+  return (await res.json()) as AddJenisResponse;
 }
 
 export async function deleteJenisSuggestion(
-  jenis: string,
+  id: string,
   signal?: AbortSignal,
-): Promise<JenisMutationResponse> {
-  const normalizedJenis = normalizeJenis(jenis);
-
-  if (!normalizedJenis) {
-    throw new Error("Jenis tidak boleh kosong");
-  }
-
-  jenisStore.delete(normalizedJenis);
-
-  window.alert(
-    `Jenis "${normalizedJenis}" berhasil dihapus dari database mock.`,
-  );
-
-  return simulateNetwork(
-    {
-      success: true,
-      data: getSortedJenisPool(),
-    },
+): Promise<DeleteJenisResponse> {
+  const res = await fetch(`/api/v1/item-types/${id}`, {
+    method: "DELETE",
     signal,
-  );
+  });
+
+  if (!res.ok) throw new Error("Gagal menghapus suggestion jenis");
+  return (await res.json()) as DeleteJenisResponse;
 }
 
 // EXPORT
@@ -502,18 +229,12 @@ export async function fetchInventory(
   params: InventoryQueryParams,
   signal?: AbortSignal,
 ): Promise<InventoryResponse> {
-  if (USE_MOCK) {
-    return fetchInventoryMock(params, signal);
-  }
   return fetchInventoryApi(params, signal);
 }
 
 export async function fetchFilterOptions(
   signal?: AbortSignal,
 ): Promise<FilterOptionsResponse> {
-  if (USE_MOCK) {
-    return fetchFilterOptionsMock(signal);
-  }
   return fetchFilterOptionsApi(signal);
 }
 
@@ -521,8 +242,5 @@ export async function fetchJenisSuggestions(
   query: string,
   signal?: AbortSignal,
 ): Promise<JenisSuggestionsResponse> {
-  if (USE_MOCK) {
-    return fetchJenisSuggestionsMock(query, signal);
-  }
   return fetchJenisSuggestionsApi(query, signal);
 }

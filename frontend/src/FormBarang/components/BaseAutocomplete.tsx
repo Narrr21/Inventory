@@ -7,19 +7,20 @@ import {
   Typography,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import type { Jenis } from "../../types/dashboard";
 
 interface AddOption {
   inputValue: string;
   label: string;
 }
 
-type AutocompleteOption = string | AddOption;
+type AutocompleteOption = Jenis | AddOption;
 
 interface BaseAutocompleteProps {
   label: string;
   value: string;
   inputValue: string;
-  options: string[];
+  options: Jenis[];
   onValueChange: (value: string) => void;
   onInputChange: (value: string) => void;
   onCreateOption?: (value: string) => void | Promise<void>;
@@ -44,12 +45,12 @@ export const BaseAutocomplete: React.FC<BaseAutocompleteProps> = ({
 }) => {
   const normalizedInput = inputValue.trim().toLowerCase();
   const hasExactMatch = options.some(
-    (option) => option.toLowerCase() === normalizedInput,
+    (option) => option.jenis.toLowerCase() === normalizedInput,
   );
 
-  const filteredOptions: AutocompleteOption[] = options.filter((option) =>
-    option.toLowerCase().includes(normalizedInput),
-  );
+  const filteredOptions: AutocompleteOption[] = options
+    .filter((option) => option.jenis.toLowerCase().includes(normalizedInput))
+    .slice();
 
   if (inputValue.trim() && !hasExactMatch) {
     filteredOptions.push({
@@ -67,23 +68,30 @@ export const BaseAutocomplete: React.FC<BaseAutocompleteProps> = ({
       value={value}
       inputValue={inputValue}
       onChange={(_, newValue) => {
+        if (!newValue) {
+          onValueChange("");
+          onInputChange("");
+          return;
+        }
+
         if (typeof newValue === "string") {
           onValueChange(newValue);
           onInputChange(newValue);
           return;
         }
 
-        if (newValue && typeof newValue !== "string") {
-          if (onCreateOption) {
-            void onCreateOption(newValue.inputValue);
-          }
-          onValueChange(newValue.inputValue);
-          onInputChange(newValue.inputValue);
+        // newValue is object: either AddOption or Jenis
+        if ("inputValue" in newValue) {
+          const v = newValue.inputValue;
+          if (onCreateOption) void onCreateOption(v);
+          onValueChange(v);
+          onInputChange(v);
           return;
         }
 
-        onValueChange("");
-        onInputChange("");
+        // Jenis
+        onValueChange(newValue.jenis);
+        onInputChange(newValue.jenis);
       }}
       onInputChange={(_, newInputValue, reason) => {
         if (reason === "reset") {
@@ -94,60 +102,63 @@ export const BaseAutocomplete: React.FC<BaseAutocompleteProps> = ({
         onValueChange(newInputValue);
       }}
       getOptionLabel={(option) => {
-        if (typeof option === "string") {
-          return option;
-        }
-
-        return option.inputValue;
+        if (typeof option === "string") return option;
+        if ("inputValue" in option) return option.inputValue;
+        return option.jenis;
       }}
       isOptionEqualToValue={(option, selectedValue) => {
-        if (typeof option === "string") {
-          return option === selectedValue;
-        }
+        const toStringValue = (
+          v: AutocompleteOption | string | null | undefined,
+        ) => {
+          if (!v) return "";
+          if (typeof v === "string") return v;
+          if ("inputValue" in v) return v.inputValue;
+          return v.jenis;
+        };
 
-        return option.inputValue === selectedValue;
+        return toStringValue(option) === toStringValue(selectedValue as any);
       }}
       renderOption={(props, option) => {
-        if (typeof option === "string") {
-          return (
-            <li {...props}>
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  width: "100%",
-                  gap: 1,
-                }}
-              >
-                <Typography variant="body2" noWrap>
-                  {option}
-                </Typography>
-                {onDeleteOption && (
-                  <IconButton
-                    size="small"
-                    edge="end"
-                    aria-label={`hapus-${option}`}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      void onDeleteOption(option);
-                    }}
-                  >
-                    <CloseIcon fontSize="small" />
-                  </IconButton>
-                )}
-              </Box>
-            </li>
-          );
-        }
+        const label =
+          typeof option === "string"
+            ? option
+            : "inputValue" in option
+              ? option.label
+              : option.jenis;
+
+        const { key, ...restProps } = props as any;
 
         return (
-          <li {...props}>
-            <Typography variant="body2">
-              {option.label}
-            </Typography>
+          <li key={key} {...restProps}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                width: "100%",
+                gap: 1,
+              }}
+            >
+              <Typography variant="body2" noWrap>
+                {label}
+              </Typography>
+              {/* show delete only for existing Jenis items */}
+              {!("inputValue" in option) && onDeleteOption && (
+                <IconButton
+                  size="small"
+                  edge="end"
+                  aria-label={`hapus-${"jenis" in option ? option.jenis : String(option)}`}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if ("_id" in option) void onDeleteOption(option._id);
+                  }}
+                >
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              )}
+            </Box>
           </li>
         );
       }}

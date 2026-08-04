@@ -172,7 +172,7 @@ const ProjectPage: React.FC = () => {
     }
 
     deleteProject(id)
-      .then((response) => setData(response as ListOfProjectsResponse))
+      .then(() => fetchListOfProjects().then((resp) => setData(resp)))
       .catch((err) => {
         console.error("Failed to delete project:", err);
         alert("Gagal menghapus project. Silakan coba lagi.");
@@ -182,20 +182,20 @@ const ProjectPage: React.FC = () => {
   const handleSubmit = (formData: ProjectFormData) => {
     if (formData.id) {
       updateProject(formData.id, {
-        name: formData.name,
-        location: formData.location,
+        namaProyek: formData.name,
+        lokasi: formData.location,
       })
-        .then((response) => setData(response as ListOfProjectsResponse))
+        .then(() => fetchListOfProjects().then((resp) => setData(resp)))
         .catch((err) => {
           console.error("Failed to update project:", err);
           alert("Gagal memperbarui project. Silakan coba lagi.");
         });
     } else {
       createProject({
-        name: formData.name,
-        location: formData.location,
+        namaProyek: formData.name,
+        lokasi: formData.location,
       })
-        .then((response) => setData(response as ListOfProjectsResponse))
+        .then(() => fetchListOfProjects().then((resp) => setData(resp)))
         .catch((err) => {
           console.error("Failed to create project:", err);
           alert("Gagal membuat project baru. Silakan coba lagi.");

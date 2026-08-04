@@ -6,7 +6,7 @@ import { BaseAutocomplete } from "./BaseAutocomplete";
 import { BaseDropdown } from "./BaseDropdown";
 import { BaseSection } from "./BaseSection";
 import type { FieldInfo, ItemFormData } from "../../types/form";
-import type { Project } from "../../types/dashboard";
+import type { Project, Jenis } from "../../types/dashboard";
 import { useDebounce } from "../../Dashboard/hooks/useDebounce";
 import {
   addJenisSuggestion,
@@ -21,7 +21,7 @@ interface ItemFormModalProps {
   initialData?: ItemFormData | null; // Untuk Edit Item
   options: {
     status: string[];
-    jenis: string[];
+    jenis: Jenis[];
     proyek: Project[];
   };
 }
@@ -54,7 +54,7 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
 }) => {
   const [formData, setFormData] = useState<ItemFormData>(DEFAULT_FORM);
   const [jenisInput, setJenisInput] = useState("");
-  const [jenisSuggestions, setJenisSuggestions] = useState<string[]>(
+  const [jenisSuggestions, setJenisSuggestions] = useState<Jenis[]>(
     options.jenis,
   );
   const [isJenisLoading, setIsJenisLoading] = useState(false);
@@ -85,7 +85,9 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
 
     fetchJenisSuggestions(query, controller.signal)
       .then((response) => {
-        setJenisSuggestions(response.data);
+        const data = response.data;
+        const normalized = Array.isArray(data) ? data : data ? [data] : [];
+        setJenisSuggestions(normalized);
       })
       .catch((error) => {
         if (error?.name !== "AbortError") {
@@ -158,26 +160,40 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
     }
 
     const response = await addJenisSuggestion(nextValue);
-    setJenisSuggestions(response.data);
+    const data = response.data;
+    const normalized = Array.isArray(data) ? data : data ? [data] : [];
+    // merge new entries with existing suggestions, avoiding duplicates by jenis
+    setJenisSuggestions((prev) => {
+      const map = new Map<string, Jenis>();
+      prev.forEach((j) => map.set(j.jenis, j));
+      normalized.forEach((j) => map.set(j.jenis, j));
+      return Array.from(map.values());
+    });
     setJenisInput(nextValue);
     setFormData((prev) => ({ ...prev, jenis: nextValue }));
   };
 
-  const handleDeleteJenis = async (value: string) => {
-    const confirmed = window.confirm(`Hapus jenis "${value}" dari suggestion?`);
+  const handleDeleteJenis = async (id: string) => {
+    const target = jenisSuggestions.find((j) => j._id === id);
+    const name = target ? target.jenis : id;
+    const confirmed = window.confirm(`Hapus jenis "${name}" dari suggestion?`);
 
-    if (!confirmed) {
-      return;
+    if (!confirmed) return;
+
+    const response = await deleteJenisSuggestion(id);
+    const data = response.data;
+    const normalized = Array.isArray(data) ? data : data ? [data] : [];
+    // if backend returns remaining list, use it; else remove deleted from current
+    if (normalized.length > 0) {
+      setJenisSuggestions(normalized);
+    } else {
+      setJenisSuggestions((prev) => prev.filter((j) => j._id !== id));
     }
 
-    const response = await deleteJenisSuggestion(value);
-    setJenisSuggestions(response.data);
-
     setFormData((prev) =>
-      prev.jenis === value ? { ...prev, jenis: "" } : prev,
+      prev.jenis === name ? { ...prev, jenis: "" } : prev,
     );
-
-    setJenisInput((prev) => (prev === value ? "" : prev));
+    setJenisInput((prev) => (prev === name ? "" : prev));
   };
 
   return (
