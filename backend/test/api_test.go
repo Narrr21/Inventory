@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,19 +48,24 @@ func setupBackendAPI(t *testing.T) string {
 
 	itemsColl := client.Database.Collection("items")
 	projectsColl := client.Database.Collection("projects")
+	itemTypesColl := client.Database.Collection("itemTypes")
 	if _, err := itemsColl.DeleteMany(context.Background(), map[string]interface{}{}); err != nil {
 		t.Fatalf("failed to clean items collection: %v", err)
 	}
 	if _, err := projectsColl.DeleteMany(context.Background(), map[string]interface{}{}); err != nil {
 		t.Fatalf("failed to clean projects collection: %v", err)
 	}
+	if _, err := itemTypesColl.DeleteMany(context.Background(), map[string]interface{}{}); err != nil {
+		t.Fatalf("failed to clean itemTypes collection: %v", err)
+	}
 
 	itemRepo := repository.NewItemRepository(client.Database)
 	projectRepo := repository.NewProjectRepository(client.Database)
+	itemTypeRepo := repository.NewItemTypeRepository(client.Database)
 	router := handlers.NewRouter(
-		handlers.NewItemHandler(itemRepo, projectRepo),
+		handlers.NewItemHandler(itemRepo, projectRepo, itemTypeRepo),
 		handlers.NewProjectHandler(projectRepo),
-		handlers.NewInventoryCompatHandler(itemRepo, projectRepo),
+		handlers.NewItemTypeHandler(itemTypeRepo, itemRepo),
 	)
 	server := httptest.NewServer(router)
 
@@ -67,6 +73,7 @@ func setupBackendAPI(t *testing.T) string {
 		server.Close()
 		_, _ = itemsColl.DeleteMany(context.Background(), map[string]interface{}{})
 		_, _ = projectsColl.DeleteMany(context.Background(), map[string]interface{}{})
+		_, _ = itemTypesColl.DeleteMany(context.Background(), map[string]interface{}{})
 		_ = db.Disconnect(context.Background(), client)
 	})
 
@@ -144,6 +151,15 @@ func createProject(t *testing.T, baseURL string, overrides map[string]interface{
 	status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/projects", body)
 	if status != http.StatusCreated {
 		t.Fatalf("create project: status = %d, body = %+v", status, env)
+	}
+	return env["data"].(map[string]interface{})
+}
+
+func createItemType(t *testing.T, baseURL string, jenis string) map[string]interface{} {
+	t.Helper()
+	status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/item-types", map[string]interface{}{"jenis": jenis})
+	if status != http.StatusCreated {
+		t.Fatalf("create item type: status = %d, body = %+v", status, env)
 	}
 	return env["data"].(map[string]interface{})
 }
@@ -621,6 +637,27 @@ func TestFilterOptionsAndStats(t *testing.T) {
 		}
 	})
 
+	// jenis comes from the item-type master list, not from distinct values
+	// on items — so a type registered ahead of any item that uses it still
+	// shows up as a dropdown option.
+	t.Run("FilterOptionsJenisIncludesUnusedType", func(t *testing.T) {
+		createItemType(t, baseURL, "Proyektor")
+
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/filter-options", nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		found := false
+		for _, raw := range env["data"].(map[string]interface{})["jenis"].([]interface{}) {
+			if raw.(string) == "Proyektor" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected Proyektor (registered but unused) in jenis options, got %+v", env["data"])
+		}
+	})
+
 	t.Run("Stats", func(t *testing.T) {
 		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/stats", nil)
 		if status != http.StatusOK {
@@ -975,6 +1012,214 @@ func TestProjectsNamaProyekUniqueness(t *testing.T) {
 		})
 		if status != http.StatusOK {
 			t.Fatalf("re-submitting own unchanged name should not be treated as duplicate: status = %d, body = %+v", status, env)
+		}
+	})
+}
+
+// TestItemTypesLifecycle exercises api-contract.md §Jenis Barang: Create/
+// List/Delete for the item-types master data collection, its
+// case-insensitive uniqueness (unlike namaProyek), and that deleting one
+// never touches items still using that jenis string (no FK).
+func TestItemTypesLifecycle(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+
+	t.Run("CreateAndList", func(t *testing.T) {
+		createItemType(t, baseURL, "Drone")
+
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/item-types", nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].([]interface{})
+		found := false
+		for _, raw := range data {
+			if raw.(map[string]interface{})["jenis"] == "Drone" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected Drone in list, got %+v", data)
+		}
+	})
+
+	t.Run("CreateBlankRejected", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/item-types", map[string]interface{}{"jenis": "   "})
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want 422, body = %+v", status, env)
+		}
+		errObj := env["error"].(map[string]interface{})
+		fields := errObj["fields"].(map[string]interface{})
+		if _, ok := fields["jenis"]; !ok {
+			t.Errorf("expected error.fields.jenis, got %+v", fields)
+		}
+	})
+
+	t.Run("CreateDuplicateRejected", func(t *testing.T) {
+		createItemType(t, baseURL, "Printer")
+
+		status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/item-types", map[string]interface{}{"jenis": "Printer"})
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want 422, body = %+v", status, env)
+		}
+	})
+
+	t.Run("CreateDuplicateCaseInsensitiveRejected", func(t *testing.T) {
+		createItemType(t, baseURL, "Scanner")
+
+		status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/item-types", map[string]interface{}{"jenis": "scanner"})
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("case-insensitive uniqueness should reject differently-cased duplicate: status = %d, body = %+v", status, env)
+		}
+	})
+
+	t.Run("DeleteRemovesFromList", func(t *testing.T) {
+		created := createItemType(t, baseURL, "Router")
+		id := created["_id"].(string)
+
+		status, env := apiRequest(t, baseURL, http.MethodDelete, "/api/v1/item-types/"+id, nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+
+		_, listEnv := apiRequest(t, baseURL, http.MethodGet, "/api/v1/item-types", nil)
+		for _, raw := range listEnv["data"].([]interface{}) {
+			if raw.(map[string]interface{})["_id"] == id {
+				t.Errorf("expected %s to be removed from list after delete", id)
+			}
+		}
+	})
+
+	t.Run("DeleteNotFound", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodDelete, "/api/v1/item-types/000000000000000000000000", nil)
+		if status != http.StatusNotFound {
+			t.Fatalf("status = %d, want 404, body = %+v", status, env)
+		}
+	})
+
+	// Deleting a type in use is allowed, but the items using it are not left
+	// pointing at a type that no longer exists — they fall back to the
+	// default type instead, and the response says how many were rewritten.
+	t.Run("DeleteReassignsReferencingItemsToDefault", func(t *testing.T) {
+		created := createItemType(t, baseURL, "Tablet")
+		id := created["_id"].(string)
+		item := createItem(t, baseURL, map[string]interface{}{"jenis": "Tablet"})
+
+		status, env := apiRequest(t, baseURL, http.MethodDelete, "/api/v1/item-types/"+id, nil)
+		if status != http.StatusOK {
+			t.Fatalf("delete should not be blocked by referencing item: status = %d, body = %+v", status, env)
+		}
+		data := env["data"].(map[string]interface{})
+		if data["reassignedItems"].(float64) != 1 {
+			t.Errorf("reassignedItems = %v, want 1", data["reassignedItems"])
+		}
+		if data["defaultJenis"] != "Lainnya" {
+			t.Errorf("defaultJenis = %v, want Lainnya", data["defaultJenis"])
+		}
+
+		status, env = apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/"+item["_id"].(string), nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		if jenis := env["data"].(map[string]interface{})["jenis"]; jenis != "Lainnya" {
+			t.Errorf("item.jenis = %v, want the default Lainnya after its type was deleted", jenis)
+		}
+
+		// The fallback has to exist as a real master-list entry, otherwise
+		// the reassigned item would still have a jenis outside the dropdown.
+		_, listEnv := apiRequest(t, baseURL, http.MethodGet, "/api/v1/item-types", nil)
+		found := false
+		for _, raw := range listEnv["data"].([]interface{}) {
+			if raw.(map[string]interface{})["jenis"] == "Lainnya" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected Lainnya to be auto-created in the master list, got %+v", listEnv["data"])
+		}
+	})
+
+	t.Run("DefaultTypeCannotBeDeleted", func(t *testing.T) {
+		// Guaranteed to exist by the subtest above; re-created here if this
+		// subtest is ever run in isolation.
+		_, listEnv := apiRequest(t, baseURL, http.MethodGet, "/api/v1/item-types", nil)
+		var defaultID string
+		for _, raw := range listEnv["data"].([]interface{}) {
+			row := raw.(map[string]interface{})
+			if row["jenis"] == "Lainnya" {
+				defaultID = row["_id"].(string)
+			}
+		}
+		if defaultID == "" {
+			defaultID = createItemType(t, baseURL, "Lainnya")["_id"].(string)
+		}
+
+		status, env := apiRequest(t, baseURL, http.MethodDelete, "/api/v1/item-types/"+defaultID, nil)
+		if status != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want 422 (deleting the fallback would leave items with nowhere to fall back to), body = %+v", status, env)
+		}
+		fields := env["error"].(map[string]interface{})["fields"].(map[string]interface{})
+		if _, ok := fields["jenis"]; !ok {
+			t.Errorf("expected error.fields.jenis, got %+v", fields)
+		}
+	})
+}
+
+// TestItemTypeAutoRegistration covers the other half of the "every jenis in
+// use is in the master list" invariant: writing an item with a brand-new
+// jenis registers that type, without the client calling POST /item-types.
+func TestItemTypeAutoRegistration(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+
+	listJenis := func() []string {
+		t.Helper()
+		_, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/filter-options/jenis", nil)
+		values := make([]string, 0)
+		for _, raw := range env["data"].([]interface{}) {
+			values = append(values, raw.(string))
+		}
+		return values
+	}
+
+	contains := func(values []string, want string) bool {
+		for _, v := range values {
+			if v == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("CreateItemRegistersNewJenis", func(t *testing.T) {
+		createItem(t, baseURL, map[string]interface{}{"jenis": "Starlink"})
+		if values := listJenis(); !contains(values, "Starlink") {
+			t.Errorf("jenis options = %v, want Starlink registered by the item create", values)
+		}
+	})
+
+	t.Run("UpdateItemRegistersNewJenis", func(t *testing.T) {
+		item := createItem(t, baseURL, nil)
+		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/items/"+item["_id"].(string),
+			map[string]interface{}{"jenis": "Genset"})
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		if values := listJenis(); !contains(values, "Genset") {
+			t.Errorf("jenis options = %v, want Genset registered by the item update", values)
+		}
+	})
+
+	t.Run("ExistingJenisNotDuplicated", func(t *testing.T) {
+		createItem(t, baseURL, map[string]interface{}{"jenis": "Kamera"})
+		createItem(t, baseURL, map[string]interface{}{"jenis": "kamera"})
+
+		count := 0
+		for _, v := range listJenis() {
+			if strings.EqualFold(v, "Kamera") {
+				count++
+			}
+		}
+		if count != 1 {
+			t.Errorf("found %d entries for Kamera, want 1 (matching is case-insensitive)", count)
 		}
 	})
 }

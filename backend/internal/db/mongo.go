@@ -91,6 +91,13 @@ func ensureIndexes(ctx context.Context, database *mongo.Database) error {
 		return err
 	}
 
+	itemTypeModels := []mongo.IndexModel{
+		{Keys: bson.D{{Key: "jenis", Value: 1}}},
+	}
+	if _, err := database.Collection("itemTypes").Indexes().CreateMany(ctx, itemTypeModels); err != nil {
+		return err
+	}
+
 	return nil
 }
 
