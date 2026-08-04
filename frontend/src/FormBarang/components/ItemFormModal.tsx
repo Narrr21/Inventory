@@ -2,10 +2,17 @@ import React, { useEffect, useState } from "react";
 import { Box } from "@mui/material";
 import { BaseForm } from "./BaseForm";
 import { BaseRow } from "./BaseRow";
+import { BaseAutocomplete } from "./BaseAutocomplete";
 import { BaseDropdown } from "./BaseDropdown";
 import { BaseSection } from "./BaseSection";
 import type { FieldInfo, ItemFormData } from "../../types/form";
-import type { Project } from "../../types/dashboard";
+import type { Project, Jenis } from "../../types/dashboard";
+import { useDebounce } from "../../Dashboard/hooks/useDebounce";
+import {
+  addJenisSuggestion,
+  deleteJenisSuggestion,
+  fetchJenisSuggestions,
+} from "../../api/InventoryAPI";
 
 interface ItemFormModalProps {
   open: boolean;
@@ -14,7 +21,7 @@ interface ItemFormModalProps {
   initialData?: ItemFormData | null; // Untuk Edit Item
   options: {
     status: string[];
-    jenis: string[];
+    jenis: Jenis[];
     proyek: Project[];
   };
 }
@@ -46,17 +53,55 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
   options,
 }) => {
   const [formData, setFormData] = useState<ItemFormData>(DEFAULT_FORM);
+  const [jenisInput, setJenisInput] = useState("");
+  const [jenisSuggestions, setJenisSuggestions] = useState<Jenis[]>(
+    options.jenis,
+  );
+  const [isJenisLoading, setIsJenisLoading] = useState(false);
   const isEdit = Boolean(initialData?.id);
+  const debouncedJenisInput = useDebounce(jenisInput, 250);
 
   useEffect(() => {
     if (initialData) {
       // Backend mapping transform -> Frontend format
       setFormData(initialData);
+      setJenisInput(initialData.jenis || "");
       console.log("Initial Data:", initialData);
     } else {
       setFormData(DEFAULT_FORM);
+      setJenisInput("");
     }
   }, [initialData, open]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const query = debouncedJenisInput.trim();
+
+    setIsJenisLoading(true);
+
+    fetchJenisSuggestions(query, controller.signal)
+      .then((response) => {
+        const data = response.data;
+        const normalized = Array.isArray(data) ? data : data ? [data] : [];
+        setJenisSuggestions(normalized);
+      })
+      .catch((error) => {
+        if (error?.name !== "AbortError") {
+          setJenisSuggestions(options.jenis);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsJenisLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [debouncedJenisInput, open, options.jenis]);
 
   useEffect(() => {
     if (formData.proyek) {
@@ -107,6 +152,50 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
     }));
   };
 
+  const handleCreateJenis = async (value: string) => {
+    const nextValue = value.trim();
+
+    if (!nextValue) {
+      return;
+    }
+
+    const response = await addJenisSuggestion(nextValue);
+    const data = response.data;
+    const normalized = Array.isArray(data) ? data : data ? [data] : [];
+    // merge new entries with existing suggestions, avoiding duplicates by jenis
+    setJenisSuggestions((prev) => {
+      const map = new Map<string, Jenis>();
+      prev.forEach((j) => map.set(j.jenis, j));
+      normalized.forEach((j) => map.set(j.jenis, j));
+      return Array.from(map.values());
+    });
+    setJenisInput(nextValue);
+    setFormData((prev) => ({ ...prev, jenis: nextValue }));
+  };
+
+  const handleDeleteJenis = async (id: string) => {
+    const target = jenisSuggestions.find((j) => j._id === id);
+    const name = target ? target.jenis : id;
+    const confirmed = window.confirm(`Hapus jenis "${name}" dari suggestion?`);
+
+    if (!confirmed) return;
+
+    const response = await deleteJenisSuggestion(id);
+    const data = response.data;
+    const normalized = Array.isArray(data) ? data : data ? [data] : [];
+    // if backend returns remaining list, use it; else remove deleted from current
+    if (normalized.length > 0) {
+      setJenisSuggestions(normalized);
+    } else {
+      setJenisSuggestions((prev) => prev.filter((j) => j._id !== id));
+    }
+
+    setFormData((prev) =>
+      prev.jenis === name ? { ...prev, jenis: "" } : prev,
+    );
+    setJenisInput((prev) => (prev === name ? "" : prev));
+  };
+
   return (
     <BaseForm
       open={open}
@@ -138,9 +227,7 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
         <BaseRow
           label="License Office"
           value={formData.licenseOffice}
-          onChange={(val) =>
-            setFormData((p) => ({ ...p, licenseOffice: val }))
-          }
+          onChange={(val) => setFormData((p) => ({ ...p, licenseOffice: val }))}
         />
       </Box>
 
@@ -155,11 +242,21 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
           />
         </Box>
         <Box sx={{ width: { xs: "100%", lg: "48%" } }}>
-          <BaseDropdown
+          <BaseAutocomplete
             label="Jenis"
             value={formData.jenis}
-            options={options.jenis}
-            onChange={(val) => setFormData((p) => ({ ...p, jenis: val }))}
+            inputValue={jenisInput}
+            options={jenisSuggestions}
+            onValueChange={(val) => setFormData((p) => ({ ...p, jenis: val }))}
+            onInputChange={(val) => {
+              setJenisInput(val);
+              setFormData((p) => ({ ...p, jenis: val }));
+            }}
+            onCreateOption={handleCreateJenis}
+            onDeleteOption={handleDeleteJenis}
+            placeholder="Ketik atau pilih jenis"
+            helperText="Pilih suggestion yang tersedia atau ketik jenis baru. Jika tidak ada yang cocok, pilih Tambahkan ke database."
+            loading={isJenisLoading}
           />
         </Box>
         <Box sx={{ width: { xs: "100%", lg: "48%" } }}>

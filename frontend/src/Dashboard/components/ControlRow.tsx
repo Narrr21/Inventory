@@ -4,7 +4,7 @@ import AddIcon from "@mui/icons-material/Add";
 import SearchBar from "./SearchBar";
 import StatusFilter from "./StatusFilter";
 import SearchableFilter from "./SearchableFilter";
-import type { Project } from "../../types/dashboard"
+import type { Jenis, Project } from "../../types/dashboard"
 
 interface ControlRowProps {
   onSearch: (query: string) => void;
@@ -14,7 +14,7 @@ interface ControlRowProps {
   projectOptions: Project[];
   projectSelected: string;
   onProjectChange: (value: string) => void;
-  jenisOptions: string[];
+  jenisOptions: Jenis[];
   jenisSelected: string;
   onJenisChange: (value: string) => void;
   onAddItem: () => void;
@@ -69,7 +69,7 @@ const ControlRow: React.FC<ControlRowProps> = (props) => {
         />
         <SearchableFilter
           label="Jenis Barang"
-          options={props.jenisOptions}
+          options={props.jenisOptions.map((j) => j.jenis)}
           selected={props.jenisSelected}
           onChange={props.onJenisChange}
         />

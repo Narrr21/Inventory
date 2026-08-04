@@ -31,6 +31,19 @@ var seedProjects = []models.Project{
 	{NamaProyek: "GAMMA", Lokasi: "Jakarta HQ"},
 }
 
+// seedItemTypes mirrors the jenis values used by seedItemsFor, so the
+// item-types suggestion list isn't empty on a fresh dev database.
+// "Lainnya" is the fallback every item is reassigned to when its type is
+// deleted (handlers.DefaultJenis); seeding it keeps the dev dropdown honest
+// about that even before any delete has happened.
+var seedItemTypes = []models.ItemType{
+	{Jenis: "Laptop"},
+	{Jenis: "PC"},
+	{Jenis: "Monitor"},
+	{Jenis: "Server"},
+	{Jenis: "Lainnya"},
+}
+
 // seedItemsFor builds sample items referencing the given project IDs (keyed
 // by namaProyek). Status values match the frontend's canonical set:
 // Healthy | Under Maintenance | Broken.
@@ -103,6 +116,12 @@ func main() {
 			log.Fatalf("failed to clear projects collection: %v", err)
 		}
 		log.Printf("cleared %d existing project(s)\n", projectsRes.DeletedCount)
+
+		itemTypesRes, err := client.Database.Collection("itemTypes").DeleteMany(context.Background(), map[string]interface{}{})
+		if err != nil {
+			log.Fatalf("failed to clear itemTypes collection: %v", err)
+		}
+		log.Printf("cleared %d existing item type(s)\n", itemTypesRes.DeletedCount)
 	}
 
 	projectRepo := repository.NewProjectRepository(client.Database)
@@ -126,5 +145,14 @@ func main() {
 		log.Printf("seeded item %s (_id=%s)\n", created.Nama, created.ID)
 	}
 
-	log.Printf("done: seeded %d project(s), %d item(s)\n", len(seedProjects), len(items))
+	itemTypeRepo := repository.NewItemTypeRepository(client.Database)
+	for _, itemType := range seedItemTypes {
+		created, err := itemTypeRepo.Create(context.Background(), itemType)
+		if err != nil {
+			log.Fatalf("failed to seed item type %q: %v", itemType.Jenis, err)
+		}
+		log.Printf("seeded item type %s (_id=%s)\n", created.Jenis, created.ID)
+	}
+
+	log.Printf("done: seeded %d project(s), %d item(s), %d item type(s)\n", len(seedProjects), len(items), len(seedItemTypes))
 }

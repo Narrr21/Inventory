@@ -184,101 +184,6 @@ func (r *ItemRepository) List(ctx context.Context, params ListParams) (ListResul
 	}, nil
 }
 
-// CompatListParams mirrors the frontend dashboard's InventoryQueryParams
-// (frontend/src/api/InventoryAPI.ts) — multi-select project/jenis filters
-// (OR within each, via caller-resolved idProyek values), free-text search
-// across nama/serialNumber, a single sort key/direction, and page/pageSize.
-// This is deliberately separate from ListParams/List: the compat layer's
-// filter semantics (multi-value OR) differ from /api/v1/items' single-value
-// equality filters, so reusing ListParams would misrepresent one or the
-// other.
-type CompatListParams struct {
-	Search     string
-	Status     string
-	ProjectIDs []string
-	Jenis      []string
-	SortBy     string
-	SortOrder  string
-	Page       int
-	PageSize   int
-}
-
-type CompatListResult struct {
-	Items []models.Item
-	Total int64
-}
-
-// compatSortFields maps the frontend dashboard's column keys to the real
-// stored field names.
-var compatSortFields = map[string]string{
-	"id":     "_id",
-	"name":   "nama",
-	"proyek": "idProyek",
-	"jenis":  "jenis",
-	"status": "status",
-}
-
-// ListCompat backs the /api/inventory compatibility endpoint.
-func (r *ItemRepository) ListCompat(ctx context.Context, params CompatListParams) (CompatListResult, error) {
-	filter := bson.M{}
-	if params.Status != "" {
-		filter["status"] = params.Status
-	}
-	if len(params.ProjectIDs) > 0 {
-		filter["idProyek"] = bson.M{"$in": params.ProjectIDs}
-	}
-	if len(params.Jenis) > 0 {
-		filter["jenis"] = bson.M{"$in": params.Jenis}
-	}
-	if params.Search != "" {
-		filter["$or"] = bson.A{
-			bson.M{"nama": bson.M{"$regex": params.Search, "$options": "i"}},
-			bson.M{"serialNumber": bson.M{"$regex": params.Search, "$options": "i"}},
-		}
-	}
-
-	total, err := r.coll.CountDocuments(ctx, filter)
-	if err != nil {
-		return CompatListResult{}, err
-	}
-
-	sortField, ok := compatSortFields[params.SortBy]
-	if !ok {
-		sortField = "createdAt"
-	}
-	sortOrder := -1
-	if params.SortOrder == "asc" {
-		sortOrder = 1
-	}
-
-	page := params.Page
-	if page < 1 {
-		page = 1
-	}
-	pageSize := params.PageSize
-	if pageSize < 1 {
-		pageSize = 10
-	}
-
-	findOpts := options.Find().
-		SetSort(bson.D{{Key: sortField, Value: sortOrder}}).
-		SetSkip(int64((page - 1) * pageSize)).
-		SetLimit(int64(pageSize))
-
-	cursor, err := r.coll.Find(ctx, filter, findOpts)
-	if err != nil {
-		return CompatListResult{}, err
-	}
-	defer cursor.Close(ctx)
-
-	items := make([]models.Item, 0, pageSize)
-	if err := cursor.All(ctx, &items); err != nil {
-		return CompatListResult{}, err
-	}
-
-	return CompatListResult{Items: items, Total: total}, nil
-}
-
 // GetByID returns a single item, or ErrNotFound.
 func (r *ItemRepository) GetByID(ctx context.Context, id string) (models.Item, error) {
 	var item models.Item
@@ -314,6 +219,23 @@ func (r *ItemRepository) Update(ctx context.Context, id string, patch map[string
 	return item, nil
 }
 
+// ReassignJenis rewrites every item whose jenis matches from (exact value,
+// case-insensitive) to the value to, and returns how many were changed. It
+// backs the "deleting an item type falls its items back to the default type"
+// rule: jenis is a required field, so items can never simply be left without
+// one. updatedAt is bumped, since this is a real content change to the item.
+func (r *ItemRepository) ReassignJenis(ctx context.Context, from string, to string) (int64, error) {
+	res, err := r.coll.UpdateMany(
+		ctx,
+		caseInsensitiveExact("jenis", from),
+		bson.M{"$set": bson.M{"jenis": to, "updatedAt": nowISO()}},
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.ModifiedCount, nil
+}
+
 // Delete removes an item by ID, or returns ErrNotFound.
 func (r *ItemRepository) Delete(ctx context.Context, id string) error {
 	res, err := r.coll.DeleteOne(ctx, bson.M{"_id": id})
@@ -336,19 +258,6 @@ func (r *ItemRepository) Distinct(ctx context.Context, field string) ([]string, 
 		values = []string{}
 	}
 	return values, nil
-}
-
-// FilterOptions returns the distinct values for each of the given fields.
-func (r *ItemRepository) FilterOptions(ctx context.Context, fields ...string) (map[string][]string, error) {
-	result := make(map[string][]string, len(fields))
-	for _, field := range fields {
-		values, err := r.Distinct(ctx, field)
-		if err != nil {
-			return nil, err
-		}
-		result[field] = values
-	}
-	return result, nil
 }
 
 type CountBucket struct {

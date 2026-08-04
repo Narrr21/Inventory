@@ -55,7 +55,7 @@ docker-compose up mongo
 #### 2. Run the backend (Go)
 
 `backend/cmd/server` is the real entrypoint — it serves the full `/api/v1/items` /
-`/api/v1/projects` contract (see `docs/design/api-contract.md`) backed by MongoDB. It
+`/api/v1/projects` / `/api/v1/item-types` contract (see `docs/design/api-contract.md`) backed by MongoDB. It
 automatically loads `backend/.env` on startup (via [godotenv](https://github.com/joho/godotenv);
 already-exported environment variables still take precedence). `backend/main.go` at the repo
 root is an unrelated legacy Vercel demo handler (`/api/hello`) — not part of this API, don't use
@@ -72,9 +72,21 @@ Every item references a project via `idProyek`, so an empty database has nothing
 
 ```bash
 cd backend
-go run ./cmd/seed          # insert sample projects + items (additive)
-go run ./cmd/seed --reset  # wipe items/projects first, then insert
+go run ./cmd/seed          # insert sample projects + items + item types (additive)
+go run ./cmd/seed --reset  # wipe items/projects/itemTypes first, then insert
 ```
+
+If the database already has items but no `itemTypes` collection (it predates the jenis master
+list), back-fill it once — otherwise the jenis dropdown starts empty even though items carry jenis
+values:
+
+```bash
+cd backend
+go run ./cmd/migrate-item-types          # dry run: prints what it would insert, writes nothing
+go run ./cmd/migrate-item-types --apply  # perform the inserts
+```
+
+Insert-only and idempotent — existing entries are untouched, item documents are never modified.
 
 Every route in `docs/design/api-contract.md` can be hit with curl, e.g.:
 
@@ -92,6 +104,11 @@ curl http://localhost:8080/api/v1/items/filter-options
 # or create your own project + item:
 curl -X POST http://localhost:8080/api/v1/projects -H "Content-Type: application/json" -d '{"namaProyek":"ALPHA","lokasi":"Jakarta HQ"}'
 curl -X POST http://localhost:8080/api/v1/items -H "Content-Type: application/json" -d '{"jenis":"Laptop","serialNumber":"SN-00123","nama":"RTI-ALPHA-005","status":"Healthy","idProyek":"<_id from the project response above>"}'
+
+# jenis barang is master data with its own endpoints:
+curl -X POST http://localhost:8080/api/v1/item-types -H "Content-Type: application/json" -d '{"jenis":"Starlink"}'
+curl http://localhost:8080/api/v1/item-types
+curl -X DELETE http://localhost:8080/api/v1/item-types/<_id>   # items using it fall back to "Lainnya"
 ```
 
 Every Item response (create/list/get/update) also carries a read-only `namaProyek`, resolved

@@ -16,12 +16,24 @@ import (
 )
 
 type ItemHandler struct {
-	repo        *repository.ItemRepository
-	projectRepo *repository.ProjectRepository
+	repo         *repository.ItemRepository
+	projectRepo  *repository.ProjectRepository
+	itemTypeRepo *repository.ItemTypeRepository
 }
 
-func NewItemHandler(repo *repository.ItemRepository, projectRepo *repository.ProjectRepository) *ItemHandler {
-	return &ItemHandler{repo: repo, projectRepo: projectRepo}
+func NewItemHandler(repo *repository.ItemRepository, projectRepo *repository.ProjectRepository, itemTypeRepo *repository.ItemTypeRepository) *ItemHandler {
+	return &ItemHandler{repo: repo, projectRepo: projectRepo, itemTypeRepo: itemTypeRepo}
+}
+
+// registerJenis adds the item's jenis to the item-type master list if it
+// isn't there yet. Item.Jenis stays free-text — this is not a foreign key
+// check and never rejects anything — but it keeps the master list (which is
+// what the jenis dropdown reads from) complete, so a jenis typed straight
+// into POST/PATCH /items shows up as a suggestion afterwards without the
+// client having to call POST /item-types itself. Best-effort by design: a
+// failure here must not fail an otherwise valid item write.
+func (h *ItemHandler) registerJenis(ctx context.Context, jenis string) {
+	_ = h.itemTypeRepo.EnsureExists(ctx, jenis)
 }
 
 // noSuchProjectSentinel is used as the idProyek filter value when a
@@ -150,6 +162,7 @@ func (h *ItemHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create item", nil)
 		return
 	}
+	h.registerJenis(r.Context(), created.Jenis)
 	created.NamaProyek = h.resolveNamaProyek(r.Context(), created.IdProyek)
 	response.OK(w, http.StatusCreated, created, nil)
 }
@@ -292,6 +305,7 @@ func (h *ItemHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update item", nil)
 		return
 	}
+	h.registerJenis(r.Context(), item.Jenis)
 	item.EnsureMaps()
 	item.NamaProyek = h.resolveNamaProyek(r.Context(), item.IdProyek)
 	response.OK(w, http.StatusOK, item, nil)
@@ -313,14 +327,25 @@ func (h *ItemHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
 }
 
 // FilterOptions: GET /api/v1/items/filter-options
+//
+// Each key comes from the source that owns it: jenis from the item-type
+// master list (so creating/deleting a type actually moves the dropdown),
+// status still derived from the items themselves (no master list for it in
+// this phase), and project from the projects collection.
 func (h *ItemHandler) FilterOptions(w http.ResponseWriter, r *http.Request) {
-	data, err := h.repo.FilterOptions(r.Context(), "jenis", "status")
+	jenis, err := h.itemTypeRepo.ListNames(r.Context())
 	if err != nil {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load filter options", nil)
 		return
 	}
 
-	// Also include the full project list here, so a client populating the
+	statuses, err := h.repo.Distinct(r.Context(), "status")
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load filter options", nil)
+		return
+	}
+
+	// The full project list is included here too, so a client populating the
 	// idProyek/namaProyek dropdown never needs a separate GET /projects
 	// round trip just for that — same data, same order (by namaProyek).
 	projects, err := h.projectRepo.List(r.Context())
@@ -330,25 +355,25 @@ func (h *ItemHandler) FilterOptions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := map[string]interface{}{
-		"jenis":   data["jenis"],
-		"status":  data["status"],
+		"jenis":   jenis,
+		"status":  statuses,
 		"project": projects,
 	}
 	response.OK(w, http.StatusOK, result, nil)
 }
 
-func (h *ItemHandler) distinctFieldValues(w http.ResponseWriter, r *http.Request, field string) {
-	values, err := h.repo.Distinct(r.Context(), field)
+// FilterOptionsJenis: GET /api/v1/items/filter-options/jenis
+//
+// The jenis slice of FilterOptions, kept as its own endpoint for clients
+// that only need that one dropdown. Same source (the item-type master list),
+// so the two can never disagree.
+func (h *ItemHandler) FilterOptionsJenis(w http.ResponseWriter, r *http.Request) {
+	values, err := h.itemTypeRepo.ListNames(r.Context())
 	if err != nil {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load filter options", nil)
 		return
 	}
 	response.OK(w, http.StatusOK, values, nil)
-}
-
-// FilterOptionsJenis: GET /api/v1/items/filter-options/jenis
-func (h *ItemHandler) FilterOptionsJenis(w http.ResponseWriter, r *http.Request) {
-	h.distinctFieldValues(w, r, "jenis")
 }
 
 // Stats: GET /api/v1/items/stats
