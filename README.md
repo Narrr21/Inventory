@@ -76,6 +76,11 @@ go run ./cmd/seed          # insert sample projects + items + item types (additi
 go run ./cmd/seed --reset  # wipe items/projects/itemTypes first, then insert
 ```
 
+This writes 8 projects, 16 item types and 126 items spread across every jenis, project and status,
+with `createdAt`/`updatedAt` scattered over the last ~18 months so sorting, pagination and the
+date-range filters have realistic data to work against. The generator is seeded with a fixed
+constant, so repeated `--reset` runs produce the same rows.
+
 If the database already has items but no `itemTypes` collection (it predates the jenis master
 list), back-fill it once — otherwise the jenis dropdown starts empty even though items carry jenis
 values:
