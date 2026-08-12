@@ -9,7 +9,7 @@ import (
 	"github.com/go-chi/cors"
 )
 
-func NewRouter(items *ItemHandler, projects *ProjectHandler, itemTypes *ItemTypeHandler) chi.Router {
+func NewRouter(items *ItemHandler, projects *ProjectHandler, itemTypes *ItemTypeHandler, analytics *AnalyticsHandler) chi.Router {
 	r := chi.NewRouter()
 	r.Use(middleware.Timeout(10 * time.Second))
 	r.Use(cors.Handler(cors.Options{
@@ -24,7 +24,6 @@ func NewRouter(items *ItemHandler, projects *ProjectHandler, itemTypes *ItemType
 		r.Get("/", items.ListItems)
 		r.Get("/filter-options", items.FilterOptions)
 		r.Get("/filter-options/jenis", items.FilterOptionsJenis)
-		r.Get("/stats", items.Stats)
 		r.Post("/import", items.ImportItems)
 		r.Get("/export", items.ExportItems)
 		r.Get("/{id}", items.GetItem)
@@ -44,6 +43,12 @@ func NewRouter(items *ItemHandler, projects *ProjectHandler, itemTypes *ItemType
 		r.Post("/", itemTypes.CreateItemType)
 		r.Get("/", itemTypes.ListItemTypes)
 		r.Delete("/{id}", itemTypes.DeleteItemType)
+	})
+
+	r.Route("/api/v1/analytics", func(r chi.Router) {
+		r.Get("/summary", analytics.Summary)
+		r.Get("/map", analytics.Map)
+		r.Get("/timeline", analytics.Timeline)
 	})
 
 	return r

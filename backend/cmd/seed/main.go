@@ -44,14 +44,26 @@ const (
 	prngSeed2 = 0x5eed
 )
 
-// seedProjects mirrors the Proyek entity: id (assigned on insert), namaProyek, lokasi.
+// seedProjects mirrors the Proyek entity: id (assigned on insert), namaProyek,
+// lokasi, koordinat.
+//
+// Coordinates are the real city centres, spread across Indonesia so a map
+// render has something with actual extent to fit bounds to. ETA and THETA are
+// left without coordinates on purpose: "project exists but isn't mapped yet"
+// is a state the UI has to handle (it shows up under `unmapped` in
+// /analytics/map), and it can't be tested against a dataset where every
+// project happens to have a point.
+func koordinat(lat, lng float64) *models.Koordinat {
+	return &models.Koordinat{Lat: lat, Lng: lng}
+}
+
 var seedProjects = []models.Project{
-	{NamaProyek: "ALPHA", Lokasi: "Jakarta HQ"},
-	{NamaProyek: "BETA", Lokasi: "Surabaya Branch"},
-	{NamaProyek: "GAMMA", Lokasi: "Bandung Site"},
-	{NamaProyek: "DELTA", Lokasi: "Medan Warehouse"},
-	{NamaProyek: "EPSILON", Lokasi: "Makassar Site"},
-	{NamaProyek: "ZETA", Lokasi: "Balikpapan Field Office"},
+	{NamaProyek: "ALPHA", Lokasi: "Jakarta HQ", Koordinat: koordinat(-6.2088, 106.8456)},
+	{NamaProyek: "BETA", Lokasi: "Surabaya Branch", Koordinat: koordinat(-7.2575, 112.7521)},
+	{NamaProyek: "GAMMA", Lokasi: "Bandung Site", Koordinat: koordinat(-6.9175, 107.6191)},
+	{NamaProyek: "DELTA", Lokasi: "Medan Warehouse", Koordinat: koordinat(3.5952, 98.6722)},
+	{NamaProyek: "EPSILON", Lokasi: "Makassar Site", Koordinat: koordinat(-5.1477, 119.4327)},
+	{NamaProyek: "ZETA", Lokasi: "Balikpapan Field Office", Koordinat: koordinat(-1.2379, 116.8529)},
 	{NamaProyek: "ETA", Lokasi: "Semarang Plant"},
 	{NamaProyek: "THETA", Lokasi: "Denpasar Office"},
 }
@@ -300,9 +312,10 @@ var seedJenis = []jenisSpec{
 		},
 	},
 	{
-		// "Lainnya" is the fallback every item is reassigned to when its type
-		// is deleted (handlers.DefaultJenis) — seeding real items under it
-		// keeps the dev dropdown honest about that even before any delete.
+		// "Lainnya" is just an ordinary catch-all type — it carries no special
+		// meaning in the API (it used to be the reassign target when a type was
+		// deleted; deletes are now blocked instead). Kept in the seed set
+		// because a real inventory always has a miscellaneous bucket.
 		jenis: "Lainnya", count: 4, serialPrefix: "MSC",
 		models:   []string{"Barcode Scanner Zebra DS2208", "Label Printer Brother QL-800", "Docking Station Dell WD19", "Headset Jabra Evolve 20"},
 		notes:    []string{"aksesori pendukung operasional", "peralatan gudang", "belum dikategorikan"},

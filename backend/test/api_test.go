@@ -17,6 +17,9 @@ import (
 	"my-backend/internal/db"
 	"my-backend/internal/handlers"
 	"my-backend/internal/repository"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 // setupBackendAPI wires up the real backend (Mongo connection, repositories,
@@ -27,6 +30,16 @@ import (
 // collections before and after the test, and skips if no MongoDB instance is
 // reachable.
 func setupBackendAPI(t *testing.T) string {
+	t.Helper()
+	baseURL, _ := setupBackendAPIWithDB(t)
+	return baseURL
+}
+
+// setupBackendAPIWithDB is setupBackendAPI plus the raw database handle, for
+// the few tests that have to manufacture states the API itself no longer
+// allows — e.g. an item whose idProyek points nowhere, which used to be
+// reachable by deleting a project out from under it and is now blocked.
+func setupBackendAPIWithDB(t *testing.T) (string, *mongo.Database) {
 	t.Helper()
 
 	uri := os.Getenv("MONGODB_URI")
@@ -64,8 +77,9 @@ func setupBackendAPI(t *testing.T) string {
 	itemTypeRepo := repository.NewItemTypeRepository(client.Database)
 	router := handlers.NewRouter(
 		handlers.NewItemHandler(itemRepo, projectRepo, itemTypeRepo),
-		handlers.NewProjectHandler(projectRepo),
+		handlers.NewProjectHandler(projectRepo, itemRepo),
 		handlers.NewItemTypeHandler(itemTypeRepo, itemRepo),
+		handlers.NewAnalyticsHandler(itemRepo, projectRepo, itemTypeRepo),
 	)
 	server := httptest.NewServer(router)
 
@@ -77,7 +91,7 @@ func setupBackendAPI(t *testing.T) string {
 		_ = db.Disconnect(context.Background(), client)
 	})
 
-	return server.URL
+	return server.URL, client.Database
 }
 
 // apiRequest performs a real HTTP round trip against the running backend and
@@ -129,6 +143,61 @@ func requestStatus(t *testing.T, baseURL, method, path string) int {
 	defer resp.Body.Close()
 	io.Copy(io.Discard, resp.Body)
 	return resp.StatusCode
+}
+
+// assertErrorEnvelope checks the flat failure envelope every endpoint shares:
+// success=false, a numeric code mirroring the HTTP status, the expected
+// errorCode, and a non-empty msg. Returns the envelope so callers can go on to
+// inspect fields/details.
+func assertErrorEnvelope(t *testing.T, status int, env map[string]interface{}, wantStatus int, wantErrorCode string) map[string]interface{} {
+	t.Helper()
+	if status != wantStatus {
+		t.Fatalf("status = %d, want %d, body = %+v", status, wantStatus, env)
+	}
+	if env["success"] != false {
+		t.Errorf("success = %v, want false", env["success"])
+	}
+	if code, ok := env["code"].(float64); !ok || int(code) != wantStatus {
+		t.Errorf("code = %v, want %d (must mirror the HTTP status)", env["code"], wantStatus)
+	}
+	if env["errorCode"] != wantErrorCode {
+		t.Errorf("errorCode = %v, want %v", env["errorCode"], wantErrorCode)
+	}
+	if msg, ok := env["msg"].(string); !ok || msg == "" {
+		t.Errorf("msg = %v, want a non-empty explanation", env["msg"])
+	}
+	if _, nested := env["error"]; nested {
+		t.Errorf("envelope still carries the pre-v6 nested error object: %+v", env["error"])
+	}
+	return env
+}
+
+// assertErrorFields asserts an error envelope carries per-field validation
+// messages for every named field.
+func assertErrorFields(t *testing.T, env map[string]interface{}, wantFields ...string) {
+	t.Helper()
+	fields, ok := env["fields"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("fields missing or wrong type: %+v", env)
+	}
+	for _, f := range wantFields {
+		if _, ok := fields[f]; !ok {
+			t.Errorf("expected fields to contain %q, got %+v", f, fields)
+		}
+	}
+}
+
+// assertSuccessCode checks a success envelope carries the numeric code too —
+// the whole point of adding it was that clients can read one field regardless
+// of outcome.
+func assertSuccessCode(t *testing.T, env map[string]interface{}, wantStatus int) {
+	t.Helper()
+	if env["success"] != true {
+		t.Errorf("success = %v, want true", env["success"])
+	}
+	if code, ok := env["code"].(float64); !ok || int(code) != wantStatus {
+		t.Errorf("code = %v, want %d", env["code"], wantStatus)
+	}
 }
 
 // projectSeq gives each auto-created default project a distinct namaProyek,
@@ -315,16 +384,7 @@ func TestItemNotFoundBehaviors(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			status, env := apiRequest(t, baseURL, tc.method, tc.path, tc.body)
-			if status != http.StatusNotFound {
-				t.Fatalf("status = %d, want 404, body = %+v", status, env)
-			}
-			if env["success"] != false {
-				t.Errorf("success = %v, want false", env["success"])
-			}
-			errObj, ok := env["error"].(map[string]interface{})
-			if !ok || errObj["code"] != "NOT_FOUND" {
-				t.Errorf("error = %+v, want code NOT_FOUND", env["error"])
-			}
+			assertErrorEnvelope(t, status, env, http.StatusNotFound, "NOT_FOUND")
 		})
 	}
 }
@@ -337,19 +397,10 @@ func TestItemValidation(t *testing.T) {
 
 	assertValidationError := func(t *testing.T, env map[string]interface{}, wantFields ...string) {
 		t.Helper()
-		errObj, ok := env["error"].(map[string]interface{})
-		if !ok || errObj["code"] != "VALIDATION_ERROR" {
-			t.Fatalf("error = %+v, want code VALIDATION_ERROR", env["error"])
+		if env["errorCode"] != "VALIDATION_ERROR" {
+			t.Fatalf("errorCode = %v, want VALIDATION_ERROR (body = %+v)", env["errorCode"], env)
 		}
-		fields, ok := errObj["fields"].(map[string]interface{})
-		if !ok {
-			t.Fatalf("error.fields missing or wrong type: %+v", errObj)
-		}
-		for _, f := range wantFields {
-			if _, ok := fields[f]; !ok {
-				t.Errorf("expected error.fields to contain %q, got %+v", f, fields)
-			}
-		}
+		assertErrorFields(t, env, wantFields...)
 	}
 
 	t.Run("CreateMissingRequiredFields", func(t *testing.T) {
@@ -658,26 +709,10 @@ func TestFilterOptionsAndStats(t *testing.T) {
 		}
 	})
 
-	t.Run("Stats", func(t *testing.T) {
-		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/stats", nil)
-		if status != http.StatusOK {
-			t.Fatalf("status = %d, body = %+v", status, env)
-		}
-		data := env["data"].(map[string]interface{})
-		if data["totalItems"].(float64) != 2 {
-			t.Errorf("totalItems = %v, want 2", data["totalItems"])
-		}
-		byStatus := data["byStatus"].([]interface{})
-		if len(byStatus) != 2 {
-			t.Errorf("byStatus buckets = %d, want 2", len(byStatus))
-		}
-		byJenis := data["byJenis"].([]interface{})
-		if len(byJenis) != 2 {
-			t.Errorf("byJenis buckets = %d, want 2", len(byJenis))
-		}
-		recent := data["recentlyAdded"].([]interface{})
-		if len(recent) != 2 {
-			t.Errorf("recentlyAdded = %d, want 2", len(recent))
+	// The F05 stub is gone; /analytics/summary replaced it.
+	t.Run("StatsEndpointRemoved", func(t *testing.T) {
+		if status := requestStatus(t, baseURL, http.MethodGet, "/api/v1/items/stats"); status != http.StatusNotFound {
+			t.Errorf("GET /items/stats status = %d, want 404 (replaced by /analytics/summary)", status)
 		}
 	})
 }
@@ -712,13 +747,7 @@ func TestProjectsCreateAndList(t *testing.T) {
 		status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/projects", map[string]interface{}{
 			"lokasi": "Somewhere",
 		})
-		if status != http.StatusUnprocessableEntity {
-			t.Fatalf("status = %d, want 422, body = %+v", status, env)
-		}
-		errObj := env["error"].(map[string]interface{})
-		if errObj["code"] != "VALIDATION_ERROR" {
-			t.Errorf("error.code = %v, want VALIDATION_ERROR", errObj["code"])
-		}
+		assertErrorEnvelope(t, status, env, http.StatusUnprocessableEntity, "VALIDATION_ERROR")
 	})
 }
 
@@ -917,13 +946,7 @@ func TestProjectsFullCRUD(t *testing.T) {
 		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/projects/"+id, map[string]interface{}{
 			"namaProyek": "",
 		})
-		if status != http.StatusUnprocessableEntity {
-			t.Fatalf("status = %d, want 422, body = %+v", status, env)
-		}
-		errObj := env["error"].(map[string]interface{})
-		if errObj["code"] != "VALIDATION_ERROR" {
-			t.Errorf("error.code = %v, want VALIDATION_ERROR", errObj["code"])
-		}
+		assertErrorEnvelope(t, status, env, http.StatusUnprocessableEntity, "VALIDATION_ERROR")
 	})
 
 	t.Run("UpdateNotFound", func(t *testing.T) {
@@ -949,14 +972,54 @@ func TestProjectsFullCRUD(t *testing.T) {
 		}
 	})
 
-	t.Run("DeleteNotBlockedByReferencingItem", func(t *testing.T) {
+	// A project holding items can't be deleted: the pre-v6 behavior left those
+	// items with a dangling idProyek and no way to notice or fix it.
+	t.Run("DeleteBlockedByReferencingItem", func(t *testing.T) {
 		project := createProject(t, baseURL, map[string]interface{}{"namaProyek": "IOTA"})
 		id := project["_id"].(string)
-		createItem(t, baseURL, map[string]interface{}{"idProyek": id})
+		item := createItem(t, baseURL, map[string]interface{}{"idProyek": id})
 
 		status, env := apiRequest(t, baseURL, http.MethodDelete, "/api/v1/projects/"+id, nil)
+		assertErrorEnvelope(t, status, env, http.StatusConflict, "PROJECT_IN_USE")
+		details, ok := env["details"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("details missing: %+v", env)
+		}
+		if details["itemCount"].(float64) != 1 {
+			t.Errorf("details.itemCount = %v, want 1", details["itemCount"])
+		}
+		if details["namaProyek"] != "IOTA" {
+			t.Errorf("details.namaProyek = %v, want IOTA", details["namaProyek"])
+		}
+
+		// Refused delete, no side effects: both project and item still there.
+		if status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/projects/"+id, nil); status != http.StatusOK {
+			t.Errorf("project should survive the refused delete: status = %d, body = %+v", status, env)
+		}
+		if status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/"+item["_id"].(string), nil); status != http.StatusOK {
+			t.Errorf("item should be untouched by the refused delete: status = %d, body = %+v", status, env)
+		}
+	})
+
+	// The way out: move the item to another project, then the delete works.
+	t.Run("DeleteSucceedsAfterItemsMoveAway", func(t *testing.T) {
+		from := createProject(t, baseURL, map[string]interface{}{"namaProyek": "LAMBDA-FROM"})
+		to := createProject(t, baseURL, map[string]interface{}{"namaProyek": "LAMBDA-TO"})
+		item := createItem(t, baseURL, map[string]interface{}{"idProyek": from["_id"].(string)})
+
+		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/items/"+item["_id"].(string),
+			map[string]interface{}{"idProyek": to["_id"].(string)})
 		if status != http.StatusOK {
-			t.Fatalf("delete should not be blocked by referencing item: status = %d, body = %+v", status, env)
+			t.Fatalf("move item: status = %d, body = %+v", status, env)
+		}
+
+		status, env = apiRequest(t, baseURL, http.MethodDelete, "/api/v1/projects/"+from["_id"].(string), nil)
+		if status != http.StatusOK {
+			t.Fatalf("delete should succeed once the project is empty: status = %d, body = %+v", status, env)
+		}
+		assertSuccessCode(t, env, http.StatusOK)
+		if nama := env["data"].(map[string]interface{})["namaProyek"]; nama != "LAMBDA-FROM" {
+			t.Errorf("data.namaProyek = %v, want LAMBDA-FROM echoed back", nama)
 		}
 	})
 }
@@ -972,14 +1035,8 @@ func TestProjectsNamaProyekUniqueness(t *testing.T) {
 		status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/projects", map[string]interface{}{
 			"namaProyek": "KAPPA",
 		})
-		if status != http.StatusUnprocessableEntity {
-			t.Fatalf("status = %d, want 422, body = %+v", status, env)
-		}
-		errObj := env["error"].(map[string]interface{})
-		fields := errObj["fields"].(map[string]interface{})
-		if _, ok := fields["namaProyek"]; !ok {
-			t.Errorf("expected error.fields.namaProyek, got %+v", fields)
-		}
+		assertErrorEnvelope(t, status, env, http.StatusUnprocessableEntity, "VALIDATION_ERROR")
+		assertErrorFields(t, env, "namaProyek")
 	})
 
 	t.Run("CreateDifferentCaseAllowed", func(t *testing.T) {
@@ -1044,14 +1101,8 @@ func TestItemTypesLifecycle(t *testing.T) {
 
 	t.Run("CreateBlankRejected", func(t *testing.T) {
 		status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/item-types", map[string]interface{}{"jenis": "   "})
-		if status != http.StatusUnprocessableEntity {
-			t.Fatalf("status = %d, want 422, body = %+v", status, env)
-		}
-		errObj := env["error"].(map[string]interface{})
-		fields := errObj["fields"].(map[string]interface{})
-		if _, ok := fields["jenis"]; !ok {
-			t.Errorf("expected error.fields.jenis, got %+v", fields)
-		}
+		assertErrorEnvelope(t, status, env, http.StatusUnprocessableEntity, "VALIDATION_ERROR")
+		assertErrorFields(t, env, "jenis")
 	})
 
 	t.Run("CreateDuplicateRejected", func(t *testing.T) {
@@ -1096,70 +1147,97 @@ func TestItemTypesLifecycle(t *testing.T) {
 		}
 	})
 
-	// Deleting a type in use is allowed, but the items using it are not left
-	// pointing at a type that no longer exists — they fall back to the
-	// default type instead, and the response says how many were rewritten.
-	t.Run("DeleteReassignsReferencingItemsToDefault", func(t *testing.T) {
+	// Deleting a type that items still use is refused outright, and the item
+	// documents are left completely untouched — no reassignment, no rewrite of
+	// their jenis. The blocking count travels in details so the UI can name a
+	// number without querying for it.
+	t.Run("DeleteBlockedWhileItemsUseIt", func(t *testing.T) {
 		created := createItemType(t, baseURL, "Tablet")
 		id := created["_id"].(string)
 		item := createItem(t, baseURL, map[string]interface{}{"jenis": "Tablet"})
 
 		status, env := apiRequest(t, baseURL, http.MethodDelete, "/api/v1/item-types/"+id, nil)
-		if status != http.StatusOK {
-			t.Fatalf("delete should not be blocked by referencing item: status = %d, body = %+v", status, env)
+		assertErrorEnvelope(t, status, env, http.StatusConflict, "ITEM_TYPE_IN_USE")
+		details, ok := env["details"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("details missing: %+v", env)
 		}
-		data := env["data"].(map[string]interface{})
-		if data["reassignedItems"].(float64) != 1 {
-			t.Errorf("reassignedItems = %v, want 1", data["reassignedItems"])
+		if details["itemCount"].(float64) != 1 {
+			t.Errorf("details.itemCount = %v, want 1", details["itemCount"])
 		}
-		if data["defaultJenis"] != "Lainnya" {
-			t.Errorf("defaultJenis = %v, want Lainnya", data["defaultJenis"])
-		}
-
-		status, env = apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/"+item["_id"].(string), nil)
-		if status != http.StatusOK {
-			t.Fatalf("status = %d, body = %+v", status, env)
-		}
-		if jenis := env["data"].(map[string]interface{})["jenis"]; jenis != "Lainnya" {
-			t.Errorf("item.jenis = %v, want the default Lainnya after its type was deleted", jenis)
+		if details["jenis"] != "Tablet" {
+			t.Errorf("details.jenis = %v, want Tablet", details["jenis"])
 		}
 
-		// The fallback has to exist as a real master-list entry, otherwise
-		// the reassigned item would still have a jenis outside the dropdown.
+		// The item keeps its jenis: a refused delete must not have side effects.
+		_, itemEnv := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/"+item["_id"].(string), nil)
+		if jenis := itemEnv["data"].(map[string]interface{})["jenis"]; jenis != "Tablet" {
+			t.Errorf("item.jenis = %v, want it untouched at Tablet", jenis)
+		}
+
+		// And the type is still there to try again later.
 		_, listEnv := apiRequest(t, baseURL, http.MethodGet, "/api/v1/item-types", nil)
 		found := false
 		for _, raw := range listEnv["data"].([]interface{}) {
-			if raw.(map[string]interface{})["jenis"] == "Lainnya" {
+			if raw.(map[string]interface{})["_id"] == id {
 				found = true
 			}
 		}
 		if !found {
-			t.Errorf("expected Lainnya to be auto-created in the master list, got %+v", listEnv["data"])
+			t.Errorf("expected Tablet to survive the refused delete, got %+v", listEnv["data"])
 		}
 	})
 
-	t.Run("DefaultTypeCannotBeDeleted", func(t *testing.T) {
-		// Guaranteed to exist by the subtest above; re-created here if this
-		// subtest is ever run in isolation.
+	// The escape hatch from the block above: move the last item off the type,
+	// then the delete goes through. This is the flow the frontend has to guide
+	// the user through, so it's worth pinning down end to end.
+	t.Run("DeleteSucceedsAfterItemsMoveOff", func(t *testing.T) {
+		createItemType(t, baseURL, "Plotter")
 		_, listEnv := apiRequest(t, baseURL, http.MethodGet, "/api/v1/item-types", nil)
-		var defaultID string
+		var id string
 		for _, raw := range listEnv["data"].([]interface{}) {
 			row := raw.(map[string]interface{})
-			if row["jenis"] == "Lainnya" {
-				defaultID = row["_id"].(string)
+			if row["jenis"] == "Plotter" {
+				id = row["_id"].(string)
 			}
 		}
-		if defaultID == "" {
-			defaultID = createItemType(t, baseURL, "Lainnya")["_id"].(string)
+		item := createItem(t, baseURL, map[string]interface{}{"jenis": "Plotter"})
+
+		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/items/"+item["_id"].(string),
+			map[string]interface{}{"jenis": "Laptop"})
+		if status != http.StatusOK {
+			t.Fatalf("move item off the type: status = %d, body = %+v", status, env)
 		}
 
-		status, env := apiRequest(t, baseURL, http.MethodDelete, "/api/v1/item-types/"+defaultID, nil)
-		if status != http.StatusUnprocessableEntity {
-			t.Fatalf("status = %d, want 422 (deleting the fallback would leave items with nowhere to fall back to), body = %+v", status, env)
+		status, env = apiRequest(t, baseURL, http.MethodDelete, "/api/v1/item-types/"+id, nil)
+		if status != http.StatusOK {
+			t.Fatalf("delete should succeed once nothing uses the type: status = %d, body = %+v", status, env)
 		}
-		fields := env["error"].(map[string]interface{})["fields"].(map[string]interface{})
-		if _, ok := fields["jenis"]; !ok {
-			t.Errorf("expected error.fields.jenis, got %+v", fields)
+		assertSuccessCode(t, env, http.StatusOK)
+		if jenis := env["data"].(map[string]interface{})["jenis"]; jenis != "Plotter" {
+			t.Errorf("data.jenis = %v, want Plotter echoed back for the confirmation toast", jenis)
+		}
+	})
+
+	// "Laptop" and "laptop" are one type as far as uniqueness goes, so an item
+	// written with either spelling has to block deleting it.
+	t.Run("DeleteBlockedByDifferentlyCasedItems", func(t *testing.T) {
+		created := createItemType(t, baseURL, "Kamera")
+		id := created["_id"].(string)
+		createItem(t, baseURL, map[string]interface{}{"jenis": "kamera"})
+
+		status, env := apiRequest(t, baseURL, http.MethodDelete, "/api/v1/item-types/"+id, nil)
+		assertErrorEnvelope(t, status, env, http.StatusConflict, "ITEM_TYPE_IN_USE")
+	})
+
+	// "Lainnya" lost its special status when reassign-on-delete went away: it
+	// is now an ordinary entry, deletable like any other unused type.
+	t.Run("LainnyaIsAnOrdinaryType", func(t *testing.T) {
+		created := createItemType(t, baseURL, "Lainnya")
+
+		status, env := apiRequest(t, baseURL, http.MethodDelete, "/api/v1/item-types/"+created["_id"].(string), nil)
+		if status != http.StatusOK {
+			t.Fatalf("Lainnya should be deletable like any unused type: status = %d, body = %+v", status, env)
 		}
 	})
 }
@@ -1251,13 +1329,7 @@ func TestMalformedBody(t *testing.T) {
 
 	assertMalformed := func(t *testing.T, status int, env map[string]interface{}) {
 		t.Helper()
-		if status != http.StatusBadRequest {
-			t.Fatalf("status = %d, want 400, body = %+v", status, env)
-		}
-		errObj, ok := env["error"].(map[string]interface{})
-		if !ok || errObj["code"] != "MALFORMED_BODY" {
-			t.Errorf("error = %+v, want code MALFORMED_BODY", env["error"])
-		}
+		assertErrorEnvelope(t, status, env, http.StatusBadRequest, "MALFORMED_BODY")
 	}
 
 	t.Run("EmptyBodyOnCreateItem", func(t *testing.T) {
@@ -1378,22 +1450,595 @@ func TestItemNamaProyekField(t *testing.T) {
 		}
 	})
 
-	t.Run("OrphanedIdProyekLeavesNamaProyekEmpty", func(t *testing.T) {
-		orphanProject := createProject(t, baseURL, nil)
-		item := createItem(t, baseURL, map[string]interface{}{"idProyek": orphanProject["_id"]})
+}
 
-		status, env := apiRequest(t, baseURL, http.MethodDelete, "/api/v1/projects/"+orphanProject["_id"].(string), nil)
-		if status != http.StatusOK {
-			t.Fatalf("delete project: status = %d, body = %+v", status, env)
-		}
+// TestLegacyOrphanedIdProyek covers reading data that predates the v6 delete
+// block: an item whose project is simply gone. The API can no longer produce
+// this state (DELETE /projects is refused while items reference it), so the
+// orphan is manufactured by deleting the project document directly — the same
+// shape a database carried over from v5 can still hold.
+func TestLegacyOrphanedIdProyek(t *testing.T) {
+	baseURL, database := setupBackendAPIWithDB(t)
 
-		status, env = apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/"+item["_id"].(string), nil)
+	project := createProject(t, baseURL, map[string]interface{}{"namaProyek": "ORPHAN-SRC"})
+	item := createItem(t, baseURL, map[string]interface{}{"idProyek": project["_id"]})
+
+	if _, err := database.Collection("projects").DeleteOne(context.Background(),
+		bson.M{"_id": project["_id"].(string)}); err != nil {
+		t.Fatalf("failed to simulate legacy orphan: %v", err)
+	}
+
+	t.Run("NamaProyekIsEmptyNotAnError", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/"+item["_id"].(string), nil)
 		if status != http.StatusOK {
 			t.Fatalf("status = %d, body = %+v", status, env)
 		}
 		data := env["data"].(map[string]interface{})
 		if v, ok := data["namaProyek"]; ok && v != "" {
 			t.Errorf("namaProyek = %v, want empty/absent for orphaned idProyek", v)
+		}
+	})
+
+	// The dashboard's way of finding out it has legacy junk to clean up.
+	t.Run("CountedInSummaryNeedsAttention", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/analytics/summary", nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		needsAttention := env["data"].(map[string]interface{})["needsAttention"].(map[string]interface{})
+		if needsAttention["orphanItems"].(float64) != 1 {
+			t.Errorf("orphanItems = %v, want 1", needsAttention["orphanItems"])
+		}
+	})
+}
+
+// TestProjectKoordinat covers the map coordinate field added in v6: it's
+// optional, all-or-nothing, range-checked, replaced wholesale on PATCH, and
+// removable with an explicit null.
+func TestProjectKoordinat(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+
+	assertPoint := func(t *testing.T, data map[string]interface{}, wantLat, wantLng float64) {
+		t.Helper()
+		koordinat, ok := data["koordinat"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("koordinat missing or wrong type: %+v", data)
+		}
+		if koordinat["lat"].(float64) != wantLat || koordinat["lng"].(float64) != wantLng {
+			t.Errorf("koordinat = %+v, want lat=%v lng=%v", koordinat, wantLat, wantLng)
+		}
+	}
+
+	t.Run("CreateWithKoordinat", func(t *testing.T) {
+		created := createProject(t, baseURL, map[string]interface{}{
+			"namaProyek": "KOORD-1",
+			"koordinat":  map[string]interface{}{"lat": -6.2088, "lng": 106.8456},
+		})
+		assertPoint(t, created, -6.2088, 106.8456)
+	})
+
+	// A project without a point is valid — it just can't be pinned yet. The
+	// key is absent rather than null so clients can test for presence.
+	t.Run("CreateWithoutKoordinatOmitsTheField", func(t *testing.T) {
+		created := createProject(t, baseURL, map[string]interface{}{"namaProyek": "KOORD-NONE"})
+		if _, ok := created["koordinat"]; ok {
+			t.Errorf("koordinat should be absent, got %+v", created["koordinat"])
+		}
+	})
+
+	// Forms hand back input values as strings; requiring the client to convert
+	// them first would be gratuitous.
+	t.Run("NumericStringsAccepted", func(t *testing.T) {
+		created := createProject(t, baseURL, map[string]interface{}{
+			"namaProyek": "KOORD-STR",
+			"koordinat":  map[string]interface{}{"lat": "-7.2575", "lng": "112.7521"},
+		})
+		assertPoint(t, created, -7.2575, 112.7521)
+	})
+
+	t.Run("HalfACoordinateRejected", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/projects", map[string]interface{}{
+			"namaProyek": "KOORD-HALF",
+			"koordinat":  map[string]interface{}{"lat": -6.2},
+		})
+		assertErrorEnvelope(t, status, env, http.StatusUnprocessableEntity, "VALIDATION_ERROR")
+		assertErrorFields(t, env, "koordinat.lng")
+	})
+
+	// An empty object is a bug signature (a form serializing undefined values),
+	// not a request to clear the point — so it fails instead of silently
+	// wiping a correct coordinate.
+	t.Run("EmptyObjectRejected", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/projects", map[string]interface{}{
+			"namaProyek": "KOORD-EMPTY",
+			"koordinat":  map[string]interface{}{},
+		})
+		assertErrorEnvelope(t, status, env, http.StatusUnprocessableEntity, "VALIDATION_ERROR")
+		assertErrorFields(t, env, "koordinat.lat", "koordinat.lng")
+	})
+
+	t.Run("OutOfRangeRejected", func(t *testing.T) {
+		cases := []struct {
+			name  string
+			lat   interface{}
+			lng   interface{}
+			field string
+		}{
+			{"LatTooHigh", 91.0, 100.0, "koordinat.lat"},
+			{"LatTooLow", -91.0, 100.0, "koordinat.lat"},
+			{"LngTooHigh", 0.0, 181.0, "koordinat.lng"},
+			{"LngTooLow", 0.0, -181.0, "koordinat.lng"},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/projects", map[string]interface{}{
+					"namaProyek": "KOORD-RANGE-" + tc.name,
+					"koordinat":  map[string]interface{}{"lat": tc.lat, "lng": tc.lng},
+				})
+				assertErrorEnvelope(t, status, env, http.StatusUnprocessableEntity, "VALIDATION_ERROR")
+				assertErrorFields(t, env, tc.field)
+			})
+		}
+	})
+
+	t.Run("NonNumericRejected", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/projects", map[string]interface{}{
+			"namaProyek": "KOORD-NAN",
+			"koordinat":  map[string]interface{}{"lat": "abc", "lng": ""},
+		})
+		assertErrorEnvelope(t, status, env, http.StatusUnprocessableEntity, "VALIDATION_ERROR")
+		assertErrorFields(t, env, "koordinat.lat", "koordinat.lng")
+	})
+
+	t.Run("NonObjectRejected", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodPost, "/api/v1/projects", map[string]interface{}{
+			"namaProyek": "KOORD-STRING",
+			"koordinat":  "-6.2,106.8",
+		})
+		assertErrorEnvelope(t, status, env, http.StatusUnprocessableEntity, "VALIDATION_ERROR")
+		assertErrorFields(t, env, "koordinat")
+	})
+
+	// Top-level latitude/longitude are not part of the contract; like any other
+	// unknown project key they're ignored (Project has no customAttributes).
+	t.Run("FlatLatitudeLongitudeIgnored", func(t *testing.T) {
+		created := createProject(t, baseURL, map[string]interface{}{
+			"namaProyek": "KOORD-FLAT",
+			"latitude":   -6.2,
+			"longitude":  106.8,
+		})
+		if _, ok := created["koordinat"]; ok {
+			t.Errorf("flat latitude/longitude should not become koordinat: %+v", created)
+		}
+		if _, ok := created["latitude"]; ok {
+			t.Errorf("unknown project keys should be dropped, got %+v", created)
+		}
+	})
+
+	t.Run("PatchSetsAndMovesThePoint", func(t *testing.T) {
+		created := createProject(t, baseURL, map[string]interface{}{"namaProyek": "KOORD-PATCH"})
+		id := created["_id"].(string)
+
+		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/projects/"+id, map[string]interface{}{
+			"koordinat": map[string]interface{}{"lat": -6.9175, "lng": 107.6191},
+		})
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		assertPoint(t, env["data"].(map[string]interface{}), -6.9175, 107.6191)
+
+		status, env = apiRequest(t, baseURL, http.MethodPatch, "/api/v1/projects/"+id, map[string]interface{}{
+			"koordinat": map[string]interface{}{"lat": -5.1477, "lng": 119.4327},
+		})
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		assertPoint(t, env["data"].(map[string]interface{}), -5.1477, 119.4327)
+	})
+
+	// koordinat is untouched by a PATCH that doesn't mention it — same rule as
+	// any other field.
+	t.Run("PatchWithoutKoordinatKeepsIt", func(t *testing.T) {
+		created := createProject(t, baseURL, map[string]interface{}{
+			"namaProyek": "KOORD-KEEP",
+			"koordinat":  map[string]interface{}{"lat": 3.5952, "lng": 98.6722},
+		})
+		id := created["_id"].(string)
+
+		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/projects/"+id,
+			map[string]interface{}{"lokasi": "Medan Warehouse 2"})
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		assertPoint(t, env["data"].(map[string]interface{}), 3.5952, 98.6722)
+	})
+
+	// There's no per-component patch: a partial object is an error, not a
+	// nudge to one axis.
+	t.Run("PatchPartialKoordinatRejected", func(t *testing.T) {
+		created := createProject(t, baseURL, map[string]interface{}{
+			"namaProyek": "KOORD-PARTIAL",
+			"koordinat":  map[string]interface{}{"lat": -6.2, "lng": 106.8},
+		})
+		id := created["_id"].(string)
+
+		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/projects/"+id, map[string]interface{}{
+			"koordinat": map[string]interface{}{"lat": -6.3},
+		})
+		assertErrorEnvelope(t, status, env, http.StatusUnprocessableEntity, "VALIDATION_ERROR")
+		assertErrorFields(t, env, "koordinat.lng")
+
+		// and the stored point is unchanged
+		_, getEnv := apiRequest(t, baseURL, http.MethodGet, "/api/v1/projects/"+id, nil)
+		assertPoint(t, getEnv["data"].(map[string]interface{}), -6.2, 106.8)
+	})
+
+	t.Run("PatchNullRemovesThePoint", func(t *testing.T) {
+		created := createProject(t, baseURL, map[string]interface{}{
+			"namaProyek": "KOORD-CLEAR",
+			"koordinat":  map[string]interface{}{"lat": -6.2, "lng": 106.8},
+		})
+		id := created["_id"].(string)
+
+		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/projects/"+id,
+			map[string]interface{}{"koordinat": nil})
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		if _, ok := env["data"].(map[string]interface{})["koordinat"]; ok {
+			t.Errorf("koordinat should be gone after an explicit null, got %+v", env["data"])
+		}
+
+		_, getEnv := apiRequest(t, baseURL, http.MethodGet, "/api/v1/projects/"+id, nil)
+		if _, ok := getEnv["data"].(map[string]interface{})["koordinat"]; ok {
+			t.Errorf("koordinat should stay gone after re-read, got %+v", getEnv["data"])
+		}
+	})
+
+	// The dropdown payload doubles as map data, so it has to carry the point.
+	t.Run("FilterOptionsProjectCarriesKoordinat", func(t *testing.T) {
+		createProject(t, baseURL, map[string]interface{}{
+			"namaProyek": "KOORD-FILTEROPT",
+			"koordinat":  map[string]interface{}{"lat": -1.2379, "lng": 116.8529},
+		})
+
+		_, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items/filter-options", nil)
+		for _, raw := range env["data"].(map[string]interface{})["project"].([]interface{}) {
+			row := raw.(map[string]interface{})
+			if row["namaProyek"] == "KOORD-FILTEROPT" {
+				assertPoint(t, row, -1.2379, 116.8529)
+				return
+			}
+		}
+		t.Errorf("KOORD-FILTEROPT missing from filter-options project list")
+	})
+}
+
+// TestAnalyticsSummary checks the dashboard numbers against a known dataset.
+func TestAnalyticsSummary(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+
+	mapped := createProject(t, baseURL, map[string]interface{}{
+		"namaProyek": "AN-MAPPED",
+		"lokasi":     "Jakarta HQ",
+		"koordinat":  map[string]interface{}{"lat": -6.2088, "lng": 106.8456},
+	})
+	unmappedProject := createProject(t, baseURL, map[string]interface{}{"namaProyek": "AN-UNMAPPED"})
+	createProject(t, baseURL, map[string]interface{}{"namaProyek": "AN-EMPTY"})
+
+	createItem(t, baseURL, map[string]interface{}{
+		"idProyek": mapped["_id"], "jenis": "Laptop", "status": "Healthy",
+		"licenseWindows": "Pro", "licenseOffice": "365",
+	})
+	createItem(t, baseURL, map[string]interface{}{
+		"idProyek": mapped["_id"], "jenis": "Laptop", "status": "Broken",
+		"licenseWindows": "Pro", "licenseOffice": "",
+	})
+	createItem(t, baseURL, map[string]interface{}{
+		"idProyek": unmappedProject["_id"], "jenis": "Monitor", "status": "Healthy",
+	})
+
+	status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/analytics/summary", nil)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, body = %+v", status, env)
+	}
+	assertSuccessCode(t, env, http.StatusOK)
+	data := env["data"].(map[string]interface{})
+
+	t.Run("Totals", func(t *testing.T) {
+		totals := data["totals"].(map[string]interface{})
+		for field, want := range map[string]float64{
+			"items": 3, "projects": 3, "projectsMapped": 1,
+		} {
+			if totals[field].(float64) != want {
+				t.Errorf("totals.%s = %v, want %v", field, totals[field], want)
+			}
+		}
+		// itemTypes counts the master list, which auto-registration filled in
+		// from the two jenis actually used.
+		if totals["itemTypes"].(float64) != 2 {
+			t.Errorf("totals.itemTypes = %v, want 2", totals["itemTypes"])
+		}
+	})
+
+	t.Run("ByStatusAndJenisSortedByCount", func(t *testing.T) {
+		byStatus := data["byStatus"].([]interface{})
+		first := byStatus[0].(map[string]interface{})
+		if first["status"] != "Healthy" || first["count"].(float64) != 2 {
+			t.Errorf("byStatus[0] = %+v, want Healthy x2 first", first)
+		}
+		byJenis := data["byJenis"].([]interface{})
+		firstJenis := byJenis[0].(map[string]interface{})
+		if firstJenis["jenis"] != "Laptop" || firstJenis["count"].(float64) != 2 {
+			t.Errorf("byJenis[0] = %+v, want Laptop x2 first", firstJenis)
+		}
+	})
+
+	// byProyek is pre-joined with project names, and empty projects are listed
+	// too — otherwise "which sites are empty" needs a second request.
+	t.Run("ByProyekIncludesNamesAndEmptyProjects", func(t *testing.T) {
+		byProyek := data["byProyek"].([]interface{})
+		if len(byProyek) != 3 {
+			t.Fatalf("byProyek = %d entries, want 3 (one per project)", len(byProyek))
+		}
+		counts := map[string]float64{}
+		for _, raw := range byProyek {
+			row := raw.(map[string]interface{})
+			counts[row["namaProyek"].(string)] = row["count"].(float64)
+			if row["idProyek"] == "" {
+				t.Errorf("byProyek entry missing idProyek: %+v", row)
+			}
+		}
+		for nama, want := range map[string]float64{"AN-MAPPED": 2, "AN-UNMAPPED": 1, "AN-EMPTY": 0} {
+			if counts[nama] != want {
+				t.Errorf("byProyek[%s] = %v, want %v", nama, counts[nama], want)
+			}
+		}
+	})
+
+	// A blank license means "not applicable", so it isn't a chart category.
+	t.Run("LicensesSkipBlanks", func(t *testing.T) {
+		licenses := data["licenses"].(map[string]interface{})
+		windows := licenses["windows"].([]interface{})
+		if len(windows) != 1 {
+			t.Fatalf("licenses.windows = %+v, want a single Pro bucket", windows)
+		}
+		if bucket := windows[0].(map[string]interface{}); bucket["value"] != "Pro" || bucket["count"].(float64) != 2 {
+			t.Errorf("licenses.windows[0] = %+v, want Pro x2", bucket)
+		}
+		office := licenses["office"].([]interface{})
+		if len(office) != 1 {
+			t.Errorf("licenses.office = %+v, want only the non-blank 365 bucket", office)
+		}
+	})
+
+	t.Run("NeedsAttention", func(t *testing.T) {
+		needsAttention := data["needsAttention"].(map[string]interface{})
+		for field, want := range map[string]float64{
+			"staleDays": 90, "staleItems": 0, "orphanItems": 0,
+			"projectsWithoutKoordinat": 2, "projectsWithoutItems": 1,
+		} {
+			if needsAttention[field].(float64) != want {
+				t.Errorf("needsAttention.%s = %v, want %v", field, needsAttention[field], want)
+			}
+		}
+	})
+
+	// staleDays is a display knob: garbage input falls back to the default
+	// rather than failing the request and blanking the dashboard.
+	t.Run("StaleDaysParamHonoredAndClamped", func(t *testing.T) {
+		for _, tc := range []struct {
+			query string
+			want  float64
+		}{
+			{"?staleDays=30", 30},
+			{"?staleDays=99999", 3650},
+			{"?staleDays=abc", 90},
+			{"?staleDays=0", 1},
+		} {
+			_, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/analytics/summary"+tc.query, nil)
+			got := env["data"].(map[string]interface{})["needsAttention"].(map[string]interface{})["staleDays"].(float64)
+			if got != tc.want {
+				t.Errorf("%s -> staleDays = %v, want %v", tc.query, got, tc.want)
+			}
+		}
+	})
+
+	t.Run("RecentListsCarryFullItems", func(t *testing.T) {
+		for _, key := range []string{"recentlyAdded", "recentlyUpdated"} {
+			list := data[key].([]interface{})
+			if len(list) != 3 {
+				t.Fatalf("%s = %d items, want 3", key, len(list))
+			}
+			first := list[0].(map[string]interface{})
+			for _, field := range []string{"_id", "jenis", "serialNumber", "status", "idProyek", "namaProyek"} {
+				if _, ok := first[field]; !ok {
+					t.Errorf("%s[0] missing %q: %+v", key, field, first)
+				}
+			}
+		}
+	})
+}
+
+// TestAnalyticsMap covers the map layer payload: only mapped projects become
+// pins, unmapped ones are reported separately rather than dropped, and bounds
+// is null when there's nothing to fit.
+func TestAnalyticsMap(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+
+	t.Run("EmptyDatabase", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/analytics/map", nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].(map[string]interface{})
+		if len(data["projects"].([]interface{})) != 0 || len(data["unmapped"].([]interface{})) != 0 {
+			t.Errorf("expected empty projects/unmapped, got %+v", data)
+		}
+		if data["bounds"] != nil {
+			t.Errorf("bounds = %+v, want null when nothing is mapped", data["bounds"])
+		}
+	})
+
+	north := createProject(t, baseURL, map[string]interface{}{
+		"namaProyek": "MAP-NORTH", "lokasi": "Medan",
+		"koordinat": map[string]interface{}{"lat": 3.5952, "lng": 98.6722},
+	})
+	south := createProject(t, baseURL, map[string]interface{}{
+		"namaProyek": "MAP-SOUTH", "lokasi": "Surabaya",
+		"koordinat": map[string]interface{}{"lat": -7.2575, "lng": 112.7521},
+	})
+	createProject(t, baseURL, map[string]interface{}{"namaProyek": "MAP-NOPOINT", "lokasi": "Semarang"})
+
+	createItem(t, baseURL, map[string]interface{}{"idProyek": north["_id"], "status": "Healthy"})
+	createItem(t, baseURL, map[string]interface{}{"idProyek": north["_id"], "status": "Healthy"})
+	createItem(t, baseURL, map[string]interface{}{"idProyek": north["_id"], "status": "Broken"})
+	createItem(t, baseURL, map[string]interface{}{"idProyek": south["_id"], "status": "Broken"})
+
+	status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/analytics/map", nil)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, body = %+v", status, env)
+	}
+	data := env["data"].(map[string]interface{})
+
+	t.Run("MappedProjectsCarryCountsAndStatusMix", func(t *testing.T) {
+		projects := data["projects"].([]interface{})
+		if len(projects) != 2 {
+			t.Fatalf("projects = %d, want 2 mapped", len(projects))
+		}
+		// sorted by namaProyek: MAP-NORTH before MAP-SOUTH
+		first := projects[0].(map[string]interface{})
+		if first["namaProyek"] != "MAP-NORTH" {
+			t.Fatalf("projects[0] = %v, want MAP-NORTH (sorted by name)", first["namaProyek"])
+		}
+		if first["totalItems"].(float64) != 3 {
+			t.Errorf("MAP-NORTH totalItems = %v, want 3", first["totalItems"])
+		}
+		if first["dominantStatus"] != "Healthy" {
+			t.Errorf("MAP-NORTH dominantStatus = %v, want Healthy", first["dominantStatus"])
+		}
+		byStatus := first["byStatus"].([]interface{})
+		if len(byStatus) != 2 {
+			t.Fatalf("MAP-NORTH byStatus = %+v, want 2 buckets", byStatus)
+		}
+		if top := byStatus[0].(map[string]interface{}); top["status"] != "Healthy" || top["count"].(float64) != 2 {
+			t.Errorf("byStatus[0] = %+v, want Healthy x2", top)
+		}
+		if _, ok := first["koordinat"].(map[string]interface{}); !ok {
+			t.Errorf("mapped project missing koordinat: %+v", first)
+		}
+	})
+
+	t.Run("UnmappedProjectsReportedNotDropped", func(t *testing.T) {
+		unmapped := data["unmapped"].([]interface{})
+		if len(unmapped) != 1 {
+			t.Fatalf("unmapped = %+v, want 1 entry", unmapped)
+		}
+		row := unmapped[0].(map[string]interface{})
+		if row["namaProyek"] != "MAP-NOPOINT" {
+			t.Errorf("unmapped[0].namaProyek = %v, want MAP-NOPOINT", row["namaProyek"])
+		}
+		if _, ok := row["koordinat"]; ok {
+			t.Errorf("unmapped entry should have no koordinat: %+v", row)
+		}
+	})
+
+	t.Run("Bounds", func(t *testing.T) {
+		bounds := data["bounds"].(map[string]interface{})
+		for field, want := range map[string]float64{
+			"north": 3.5952, "south": -7.2575, "east": 112.7521, "west": 98.6722,
+		} {
+			if bounds[field].(float64) != want {
+				t.Errorf("bounds.%s = %v, want %v", field, bounds[field], want)
+			}
+		}
+	})
+
+	t.Run("Totals", func(t *testing.T) {
+		totals := data["totals"].(map[string]interface{})
+		for field, want := range map[string]float64{
+			"projects": 3, "mapped": 2, "unmapped": 1, "items": 4, "itemsMapped": 4,
+		} {
+			if totals[field].(float64) != want {
+				t.Errorf("totals.%s = %v, want %v", field, totals[field], want)
+			}
+		}
+	})
+}
+
+// TestAnalyticsTimeline checks the month buckets are contiguous, zero-filled,
+// and cumulative across the whole collection.
+func TestAnalyticsTimeline(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+
+	createItem(t, baseURL, nil)
+	createItem(t, baseURL, nil)
+
+	t.Run("DefaultWindow", func(t *testing.T) {
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/analytics/timeline", nil)
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		assertSuccessCode(t, env, http.StatusOK)
+		data := env["data"].(map[string]interface{})
+		if data["months"].(float64) != 12 {
+			t.Errorf("months = %v, want the default 12", data["months"])
+		}
+		buckets := data["buckets"].([]interface{})
+		if len(buckets) != 12 {
+			t.Fatalf("buckets = %d, want exactly 12 (zero-filled)", len(buckets))
+		}
+		if data["from"] != buckets[0].(map[string]interface{})["period"] {
+			t.Errorf("from = %v, want the first bucket's period", data["from"])
+		}
+		if data["to"] != buckets[11].(map[string]interface{})["period"] {
+			t.Errorf("to = %v, want the last bucket's period", data["to"])
+		}
+
+		// Both items were just created, so they land in the final (current)
+		// month, and the running total ends at the collection size.
+		last := buckets[11].(map[string]interface{})
+		if last["created"].(float64) != 2 {
+			t.Errorf("last bucket created = %v, want 2", last["created"])
+		}
+		if last["cumulative"].(float64) != 2 {
+			t.Errorf("last bucket cumulative = %v, want 2", last["cumulative"])
+		}
+
+		// Contiguity: every bucket present, monotonic cumulative.
+		prev := 0.0
+		for i, raw := range buckets {
+			bucket := raw.(map[string]interface{})
+			if _, ok := bucket["period"].(string); !ok {
+				t.Fatalf("bucket %d has no period: %+v", i, bucket)
+			}
+			cumulative := bucket["cumulative"].(float64)
+			if cumulative < prev {
+				t.Errorf("cumulative went down at bucket %d: %v after %v", i, cumulative, prev)
+			}
+			prev = cumulative
+		}
+	})
+
+	t.Run("MonthsParamHonoredAndClamped", func(t *testing.T) {
+		for _, tc := range []struct {
+			query string
+			want  int
+		}{
+			{"?months=3", 3},
+			{"?months=1", 1},
+			{"?months=999", 60},
+			{"?months=abc", 12},
+			{"?months=0", 1},
+		} {
+			_, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/analytics/timeline"+tc.query, nil)
+			data := env["data"].(map[string]interface{})
+			if got := int(data["months"].(float64)); got != tc.want {
+				t.Errorf("%s -> months = %d, want %d", tc.query, got, tc.want)
+			}
+			if got := len(data["buckets"].([]interface{})); got != tc.want {
+				t.Errorf("%s -> %d buckets, want %d", tc.query, got, tc.want)
+			}
 		}
 	})
 }

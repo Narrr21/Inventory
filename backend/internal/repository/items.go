@@ -219,21 +219,18 @@ func (r *ItemRepository) Update(ctx context.Context, id string, patch map[string
 	return item, nil
 }
 
-// ReassignJenis rewrites every item whose jenis matches from (exact value,
-// case-insensitive) to the value to, and returns how many were changed. It
-// backs the "deleting an item type falls its items back to the default type"
-// rule: jenis is a required field, so items can never simply be left without
-// one. updatedAt is bumped, since this is a real content change to the item.
-func (r *ItemRepository) ReassignJenis(ctx context.Context, from string, to string) (int64, error) {
-	res, err := r.coll.UpdateMany(
-		ctx,
-		caseInsensitiveExact("jenis", from),
-		bson.M{"$set": bson.M{"jenis": to, "updatedAt": nowISO()}},
-	)
-	if err != nil {
-		return 0, err
-	}
-	return res.ModifiedCount, nil
+// CountByJenis reports how many items currently use a jenis value, matched
+// case-insensitively so it agrees with the case-insensitive uniqueness rule on
+// the item-type master list ("Laptop" and "laptop" are the same type, so both
+// block deleting it). Backs 409 ITEM_TYPE_IN_USE.
+func (r *ItemRepository) CountByJenis(ctx context.Context, jenis string) (int64, error) {
+	return r.coll.CountDocuments(ctx, caseInsensitiveExact("jenis", jenis))
+}
+
+// CountByProject reports how many items reference a project. Backs
+// 409 PROJECT_IN_USE.
+func (r *ItemRepository) CountByProject(ctx context.Context, idProyek string) (int64, error) {
+	return r.coll.CountDocuments(ctx, bson.M{"idProyek": idProyek})
 }
 
 // Delete removes an item by ID, or returns ErrNotFound.
@@ -265,11 +262,19 @@ type CountBucket struct {
 	Count int    `bson:"count" json:"count"`
 }
 
-// CountBy runs a group-by-count aggregation on the given field.
+// CountBy runs a group-by-count aggregation on the given field, sorted by
+// count desc then value asc so the order is stable across identical counts
+// (an unstable order makes charts jump between refreshes for no reason).
+//
+// Items whose value is missing or blank are skipped: for licenseWindows/
+// licenseOffice an empty string means "not applicable to this item", not a
+// category worth a slice in a chart. Required fields (status, jenis) can't be
+// blank anyway, so this only ever drops noise.
 func (r *ItemRepository) CountBy(ctx context.Context, field string) ([]CountBucket, error) {
 	pipeline := bson.A{
+		bson.M{"$match": bson.M{field: bson.M{"$nin": bson.A{"", nil}}}},
 		bson.M{"$group": bson.M{"_id": "$" + field, "count": bson.M{"$sum": 1}}},
-		bson.M{"$sort": bson.M{"count": -1}},
+		bson.M{"$sort": bson.D{{Key: "count", Value: -1}, {Key: "_id", Value: 1}}},
 	}
 	cursor, err := r.coll.Aggregate(ctx, pipeline)
 	if err != nil {
@@ -284,6 +289,103 @@ func (r *ItemRepository) CountBy(ctx context.Context, field string) ([]CountBuck
 	return buckets, nil
 }
 
+// ProjectStatusBucket is one (project, status) pair and its item count.
+type ProjectStatusBucket struct {
+	IdProyek string `bson:"idProyek"`
+	Status   string `bson:"status"`
+	Count    int    `bson:"count"`
+}
+
+// CountByProjectAndStatus returns the item count for every (idProyek, status)
+// combination in one aggregation — the raw material for both the per-project
+// status breakdown on the map and the per-project totals in the summary.
+// Doing it in a single query keeps /analytics/map at a fixed cost instead of
+// one round trip per project.
+func (r *ItemRepository) CountByProjectAndStatus(ctx context.Context) ([]ProjectStatusBucket, error) {
+	pipeline := bson.A{
+		bson.M{"$group": bson.M{
+			"_id":   bson.M{"idProyek": "$idProyek", "status": "$status"},
+			"count": bson.M{"$sum": 1},
+		}},
+		bson.M{"$project": bson.M{
+			"_id":      0,
+			"idProyek": "$_id.idProyek",
+			"status":   "$_id.status",
+			"count":    1,
+		}},
+	}
+	cursor, err := r.coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	buckets := make([]ProjectStatusBucket, 0)
+	if err := cursor.All(ctx, &buckets); err != nil {
+		return nil, err
+	}
+	return buckets, nil
+}
+
+// PeriodBucket is the number of items created in one YYYY-MM period.
+type PeriodBucket struct {
+	Period string `bson:"_id"`
+	Count  int    `bson:"count"`
+}
+
+// CreatedPerMonth groups items by the YYYY-MM prefix of createdAt, ascending.
+// createdAt is stored as an ISO-8601 UTC string, so the month is just its
+// first 7 characters — no date parsing, and lexicographic order is also
+// chronological order. Only months that actually have items come back; filling
+// the empty months in between is the handler's job (it knows the window).
+func (r *ItemRepository) CreatedPerMonth(ctx context.Context, fromPeriod string) ([]PeriodBucket, error) {
+	pipeline := bson.A{
+		bson.M{"$match": bson.M{"createdAt": bson.M{"$gte": fromPeriod}}},
+		bson.M{"$group": bson.M{
+			"_id":   bson.M{"$substrBytes": bson.A{"$createdAt", 0, 7}},
+			"count": bson.M{"$sum": 1},
+		}},
+		bson.M{"$sort": bson.M{"_id": 1}},
+	}
+	cursor, err := r.coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	buckets := make([]PeriodBucket, 0)
+	if err := cursor.All(ctx, &buckets); err != nil {
+		return nil, err
+	}
+	return buckets, nil
+}
+
+// CountCreatedBefore returns how many items were created strictly before an
+// ISO-8601 timestamp (or YYYY-MM prefix). Used to seed the timeline's running
+// total so the first bucket's cumulative includes everything older than the
+// window rather than restarting at zero.
+func (r *ItemRepository) CountCreatedBefore(ctx context.Context, iso string) (int64, error) {
+	return r.coll.CountDocuments(ctx, bson.M{"createdAt": bson.M{"$lt": iso}})
+}
+
+// CountUpdatedBefore returns how many items haven't been touched since an
+// ISO-8601 timestamp — the "stale, nobody has verified this in months" count.
+func (r *ItemRepository) CountUpdatedBefore(ctx context.Context, iso string) (int64, error) {
+	return r.coll.CountDocuments(ctx, bson.M{"updatedAt": bson.M{"$lt": iso}})
+}
+
+// CountOrphans returns how many items point at an idProyek that isn't in
+// validProjectIDs. These can no longer be created (item writes validate
+// idProyek, and deleting a project with items is blocked), so a non-zero
+// result is leftover data from before that rule existed.
+func (r *ItemRepository) CountOrphans(ctx context.Context, validProjectIDs []string) (int64, error) {
+	ids := make(bson.A, 0, len(validProjectIDs))
+	for _, id := range validProjectIDs {
+		ids = append(ids, id)
+	}
+	return r.coll.CountDocuments(ctx, bson.M{"idProyek": bson.M{"$nin": ids}})
+}
+
 // Count returns the total number of items in the collection.
 func (r *ItemRepository) Count(ctx context.Context) (int64, error) {
 	return r.coll.CountDocuments(ctx, bson.M{})
@@ -291,8 +393,17 @@ func (r *ItemRepository) Count(ctx context.Context) (int64, error) {
 
 // RecentlyAdded returns the most recently created items, limited to n.
 func (r *ItemRepository) RecentlyAdded(ctx context.Context, n int) ([]models.Item, error) {
+	return r.recentBy(ctx, "createdAt", n)
+}
+
+// RecentlyUpdated returns the most recently modified items, limited to n.
+func (r *ItemRepository) RecentlyUpdated(ctx context.Context, n int) ([]models.Item, error) {
+	return r.recentBy(ctx, "updatedAt", n)
+}
+
+func (r *ItemRepository) recentBy(ctx context.Context, field string, n int) ([]models.Item, error) {
 	findOpts := options.Find().
-		SetSort(bson.D{{Key: "createdAt", Value: -1}}).
+		SetSort(bson.D{{Key: field, Value: -1}}).
 		SetLimit(int64(n))
 
 	cursor, err := r.coll.Find(ctx, bson.M{}, findOpts)

@@ -376,53 +376,9 @@ func (h *ItemHandler) FilterOptionsJenis(w http.ResponseWriter, r *http.Request)
 	response.OK(w, http.StatusOK, values, nil)
 }
 
-// Stats: GET /api/v1/items/stats
-func (h *ItemHandler) Stats(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	total, err := h.repo.Count(ctx)
-	if err != nil {
-		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load stats", nil)
-		return
-	}
-	byStatus, err := h.repo.CountBy(ctx, "status")
-	if err != nil {
-		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load stats", nil)
-		return
-	}
-	byJenis, err := h.repo.CountBy(ctx, "jenis")
-	if err != nil {
-		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load stats", nil)
-		return
-	}
-	byProyek, err := h.repo.CountBy(ctx, "idProyek")
-	if err != nil {
-		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load stats", nil)
-		return
-	}
-	recent, err := h.repo.RecentlyAdded(ctx, 5)
-	if err != nil {
-		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load stats", nil)
-		return
-	}
-
-	namaProyekByID := buildNamaProyekIndex(ctx, h.projectRepo)
-	recentPublic := make([]models.ItemPublic, 0, len(recent))
-	for _, it := range recent {
-		it.EnsureMaps()
-		it.NamaProyek = namaProyekByID[it.IdProyek]
-		recentPublic = append(recentPublic, it.Public())
-	}
-
-	data := map[string]interface{}{
-		"totalItems":    total,
-		"byStatus":      byStatus,
-		"byJenis":       byJenis,
-		"byProyek":      byProyek,
-		"recentlyAdded": recentPublic,
-	}
-	response.OK(w, http.StatusOK, data, nil)
-}
+// GET /api/v1/items/stats is gone (it was an F05 stub) — the real numbers now
+// live in AnalyticsHandler under /api/v1/analytics/*, whose response is a
+// superset of what the stub returned.
 
 // ImportItems: POST /api/v1/items/import
 func (h *ItemHandler) ImportItems(w http.ResponseWriter, r *http.Request) {
