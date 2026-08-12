@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"time"
 
@@ -41,6 +42,15 @@ func NewItemRepository(db *mongo.Database) *ItemRepository {
 
 func nowISO() string {
 	return time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+}
+
+// caseInsensitiveContains builds a substring match on field. The needle is
+// regex-quoted because it comes straight from a search box: unescaped, "("
+// makes Mongo reject the whole query (surfacing as a 500 on a perfectly
+// reasonable search), and ".*" would match every document instead of the
+// literal characters the user typed.
+func caseInsensitiveContains(field, value string) bson.M {
+	return bson.M{field: bson.M{"$regex": regexp.QuoteMeta(value), "$options": "i"}}
 }
 
 func newID() string {
@@ -111,8 +121,8 @@ func (r *ItemRepository) List(ctx context.Context, params ListParams) (ListResul
 	}
 	if q, ok := params.Filters["q"]; ok && q != "" {
 		filter["$or"] = bson.A{
-			bson.M{"nama": bson.M{"$regex": q, "$options": "i"}},
-			bson.M{"serialNumber": bson.M{"$regex": q, "$options": "i"}},
+			caseInsensitiveContains("nama", q),
+			caseInsensitiveContains("serialNumber", q),
 		}
 	}
 

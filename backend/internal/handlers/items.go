@@ -42,11 +42,25 @@ func (h *ItemHandler) registerJenis(ctx context.Context, jenis string) {
 // Mongo ObjectId hex strings.
 const noSuchProjectSentinel = "__no_such_project__"
 
-// knownItemFields are the top-level JSON keys the Item model declares.
+// knownItemFields are the client-writable top-level JSON keys the Item model
+// declares.
 var knownItemFields = map[string]bool{
 	"jenis": true, "serialNumber": true, "nama": true, "idProyek": true,
 	"credentials": true, "remoteInfo": true, "licenseWindows": true, "licenseOffice": true,
-	"status": true, "deskripsi": true, "createdAt": true, "updatedAt": true,
+	"status": true, "deskripsi": true,
+}
+
+// readOnlyItemFields are keys a client may send but never control. They are
+// dropped outright rather than folded into customAttributes — echoing a
+// client-supplied createdAt back as an ad-hoc attribute would be worse than
+// ignoring it.
+//
+// createdAt/updatedAt being here is what stops a PATCH from backdating an
+// item: the repository stamps updatedAt on every write, but createdAt was
+// previously just another writable field, so a client could rewrite an item's
+// creation date and quietly skew /analytics/timeline with it.
+var readOnlyItemFields = map[string]bool{
+	"_id": true, "namaProyek": true, "createdAt": true, "updatedAt": true,
 }
 
 // splitCustomAttributes separates raw's top-level keys into recognized Item
@@ -67,7 +81,7 @@ func splitCustomAttributes(raw map[string]interface{}) (known map[string]interfa
 	}
 
 	for k, v := range raw {
-		if k == "customAttributes" || k == "_id" || k == "namaProyek" {
+		if k == "customAttributes" || readOnlyItemFields[k] {
 			continue
 		}
 		if knownItemFields[k] {

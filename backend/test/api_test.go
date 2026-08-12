@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -2038,6 +2039,105 @@ func TestAnalyticsTimeline(t *testing.T) {
 			}
 			if got := len(data["buckets"].([]interface{})); got != tc.want {
 				t.Errorf("%s -> %d buckets, want %d", tc.query, got, tc.want)
+			}
+		}
+	})
+}
+
+// TestSearchTreatsQAsLiteralText pins down that `q` is a substring search, not
+// a regex the caller can inject: an unescaped needle used to reach Mongo
+// directly, so "(" failed the whole query with a 500 and ".*" matched every
+// item instead of those two characters.
+func TestSearchTreatsQAsLiteralText(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+
+	project := createProject(t, baseURL, nil)
+	createItem(t, baseURL, map[string]interface{}{
+		"idProyek": project["_id"], "nama": "RTI-(SPECIAL)-001", "serialNumber": "SN-REGEX-001",
+	})
+	createItem(t, baseURL, map[string]interface{}{
+		"idProyek": project["_id"], "nama": "RTI-PLAIN-002", "serialNumber": "SN-REGEX-002",
+	})
+
+	search := func(t *testing.T, q string) (int, float64) {
+		t.Helper()
+		status, env := apiRequest(t, baseURL, http.MethodGet, "/api/v1/items?q="+url.QueryEscape(q), nil)
+		if status != http.StatusOK {
+			t.Fatalf("q=%q: status = %d, want 200, body = %+v", q, status, env)
+		}
+		return status, env["meta"].(map[string]interface{})["total"].(float64)
+	}
+
+	// Metacharacters are matched literally, and an unbalanced one is an
+	// ordinary no-match rather than a server error.
+	for _, tc := range []struct {
+		q    string
+		want float64
+	}{
+		{"(SPECIAL)", 1},
+		{"(", 1},
+		{")", 1},
+		{".*", 0},
+		{"[a-z]", 0},
+		{"RTI-", 2},
+	} {
+		if _, total := search(t, tc.q); total != tc.want {
+			t.Errorf("q=%q matched %v item(s), want %v", tc.q, total, tc.want)
+		}
+	}
+}
+
+// TestServerAssignedItemFieldsIgnored covers the read-only half of the item
+// shape: _id and the timestamps are the server's to set. createdAt in
+// particular used to be writable through PATCH, which let a client backdate an
+// item and skew the analytics timeline built from that field.
+func TestServerAssignedItemFieldsIgnored(t *testing.T) {
+	baseURL := setupBackendAPI(t)
+	const fakeID = "deadbeefdeadbeefdeadbeef"
+	const fakeTime = "1999-01-01T00:00:00.000Z"
+
+	t.Run("CreateIgnoresThem", func(t *testing.T) {
+		created := createItem(t, baseURL, map[string]interface{}{
+			"_id": fakeID, "createdAt": fakeTime, "updatedAt": fakeTime,
+		})
+		if created["_id"] == fakeID {
+			t.Errorf("_id = %v, want a server-generated id", created["_id"])
+		}
+		if created["createdAt"] == fakeTime || created["updatedAt"] == fakeTime {
+			t.Errorf("timestamps = %v/%v, want server-assigned", created["createdAt"], created["updatedAt"])
+		}
+	})
+
+	t.Run("PatchIgnoresThem", func(t *testing.T) {
+		item := createItem(t, baseURL, nil)
+		id := item["_id"].(string)
+		originalCreatedAt := item["createdAt"].(string)
+
+		status, env := apiRequest(t, baseURL, http.MethodPatch, "/api/v1/items/"+id, map[string]interface{}{
+			"_id": fakeID, "createdAt": fakeTime, "updatedAt": fakeTime, "status": "Broken",
+		})
+		if status != http.StatusOK {
+			t.Fatalf("status = %d, body = %+v", status, env)
+		}
+		data := env["data"].(map[string]interface{})
+		if data["_id"] != id {
+			t.Errorf("_id = %v, want unchanged %v", data["_id"], id)
+		}
+		if data["createdAt"] != originalCreatedAt {
+			t.Errorf("createdAt = %v, want unchanged %v", data["createdAt"], originalCreatedAt)
+		}
+		if data["updatedAt"] == fakeTime {
+			t.Errorf("updatedAt = %v, want a fresh server stamp", data["updatedAt"])
+		}
+		if data["status"] != "Broken" {
+			t.Errorf("status = %v, want the legitimate part of the patch to still apply", data["status"])
+		}
+		// and they must not have been quietly folded into customAttributes
+		if custom, ok := data["customAttributes"].(map[string]interface{}); ok {
+			for _, key := range []string{"_id", "createdAt", "updatedAt"} {
+				if _, leaked := custom[key]; leaked {
+					t.Errorf("%s leaked into customAttributes: %+v", key, custom)
+				}
 			}
 		}
 	})
