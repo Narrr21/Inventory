@@ -16,10 +16,19 @@
 // and the key order inside the schemaless credentials/remoteInfo/
 // customAttributes maps, which follows Go's randomized map iteration).
 // That keeps manual testing repeatable while still giving the
-// dashboard enough spread — every jenis, every project, every status, items
+// dashboard enough spread — every jenis, every status, items
 // with and without credentials/remoteInfo/licenses/customAttributes, and
 // createdAt/updatedAt spread over the last ~18 months so date-range filters
 // and sorting have something to chew on.
+//
+// The project set also covers the states the map and the delete rules care
+// about, each of which is otherwise easy to leave untested:
+//
+//	mapped + items    ALPHA, BETA, GAMMA, DELTA, EPSILON, ZETA  -> ordinary pins
+//	unmapped + items  ETA, THETA                                -> /analytics/map "unmapped"
+//	mapped + empty    IOTA                                      -> pin with totalItems 0,
+//	                                                               and the only project whose
+//	                                                               DELETE actually succeeds
 package main
 
 import (
@@ -66,14 +75,22 @@ var seedProjects = []models.Project{
 	{NamaProyek: "ZETA", Lokasi: "Balikpapan Field Office", Koordinat: koordinat(-1.2379, 116.8529)},
 	{NamaProyek: "ETA", Lokasi: "Semarang Plant"},
 	{NamaProyek: "THETA", Lokasi: "Denpasar Office"},
+	{NamaProyek: "IOTA", Lokasi: "Yogyakarta Office", Koordinat: koordinat(-7.7956, 110.3695)},
 }
 
 // projectWeights decides how many items land on each project. HQ and the two
 // big branches carry most of the fleet, the small sites carry a handful —
 // an evenly spread set would make the project filter look artificial.
+//
+// IOTA is weight 0 by design: a project with no items at all. Without one,
+// three behaviors have no data to exercise — DELETE /projects/{id} never
+// succeeds (every other project is protected by its items), the
+// projectsWithoutItems counter in /analytics/summary is always 0, and
+// /analytics/map never returns a pin with an empty byStatus.
 var projectWeights = map[string]int{
 	"ALPHA": 5, "BETA": 3, "GAMMA": 3, "DELTA": 2,
 	"EPSILON": 2, "ZETA": 1, "ETA": 2, "THETA": 1,
+	"IOTA": 0,
 }
 
 // statusWeights matches the frontend's canonical status set
@@ -559,6 +576,24 @@ func main() {
 	for _, spec := range seedJenis {
 		log.Printf("seeded %3d item(s) of jenis %s\n", perJenis[spec.jenis], spec.jenis)
 	}
+
+	// Spell out the project coverage, so it's obvious from the seed output
+	// alone which projects are pins, which aren't mapped yet, and which one is
+	// empty (and therefore the only one you can actually delete).
+	var mapped, unmapped, empty []string
+	for _, project := range seedProjects {
+		if projectWeights[project.NamaProyek] == 0 {
+			empty = append(empty, project.NamaProyek)
+		}
+		if project.Koordinat == nil {
+			unmapped = append(unmapped, project.NamaProyek)
+			continue
+		}
+		mapped = append(mapped, project.NamaProyek)
+	}
+	log.Printf("projects with koordinat (map pins): %v\n", mapped)
+	log.Printf("projects without koordinat (unmapped): %v\n", unmapped)
+	log.Printf("projects without items (deletable): %v\n", empty)
 
 	log.Printf("done: seeded %d project(s), %d item(s), %d item type(s)\n", len(seedProjects), len(items), len(itemTypes))
 }
