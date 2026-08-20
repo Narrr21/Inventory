@@ -72,6 +72,11 @@ func (r *ItemTypeRepository) ListNames(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
+// Count returns the total number of item types.
+func (r *ItemTypeRepository) Count(ctx context.Context) (int64, error) {
+	return r.coll.CountDocuments(ctx, bson.M{})
+}
+
 // GetByID returns a single item type, or ErrNotFound.
 func (r *ItemTypeRepository) GetByID(ctx context.Context, id string) (models.ItemType, error) {
 	var itemType models.ItemType

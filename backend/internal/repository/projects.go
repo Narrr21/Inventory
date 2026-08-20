@@ -100,15 +100,32 @@ func (r *ProjectRepository) ExistsByNamaProyek(ctx context.Context, namaProyek s
 	return count > 0, nil
 }
 
-// Update replaces namaProyek/lokasi on an existing project and returns the
-// updated document, or ErrNotFound.
+// Count returns the total number of projects.
+func (r *ProjectRepository) Count(ctx context.Context) (int64, error) {
+	return r.coll.CountDocuments(ctx, bson.M{})
+}
+
+// Update replaces namaProyek/lokasi/koordinat on an existing project and
+// returns the updated document, or ErrNotFound. A nil Koordinat is written as
+// an $unset rather than a null field, so "project without a point" is always
+// the same thing in the database (key absent) no matter whether the project
+// never had one or had one removed.
 func (r *ProjectRepository) Update(ctx context.Context, id string, project models.Project) (models.Project, error) {
+	update := bson.M{
+		"$set": bson.M{"namaProyek": project.NamaProyek, "lokasi": project.Lokasi},
+	}
+	if project.Koordinat != nil {
+		update["$set"].(bson.M)["koordinat"] = project.Koordinat
+	} else {
+		update["$unset"] = bson.M{"koordinat": ""}
+	}
+
 	after := options.After
 	var updated models.Project
 	err := r.coll.FindOneAndUpdate(
 		ctx,
 		bson.M{"_id": id},
-		bson.M{"$set": bson.M{"namaProyek": project.NamaProyek, "lokasi": project.Lokasi}},
+		update,
 		options.FindOneAndUpdate().SetReturnDocument(after),
 	).Decode(&updated)
 	if errors.Is(err, mongo.ErrNoDocuments) {
@@ -120,9 +137,10 @@ func (r *ProjectRepository) Update(ctx context.Context, id string, project model
 	return updated, nil
 }
 
-// Delete removes a project by ID, or returns ErrNotFound. There is
-// deliberately no check for referencing items — DELETE /projects/{id} is not
-// blocked, and referencing items become orphaned (idProyek pointing nowhere).
+// Delete removes a project by ID, or returns ErrNotFound. The "is any item
+// still referencing this project?" check lives in the handler
+// (handlers.ProjectHandler), which owns the 409 PROJECT_IN_USE response —
+// keeping this a plain single-collection operation.
 func (r *ProjectRepository) Delete(ctx context.Context, id string) error {
 	res, err := r.coll.DeleteOne(ctx, bson.M{"_id": id})
 	if err != nil {

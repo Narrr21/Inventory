@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"my-backend/internal/models"
@@ -11,12 +12,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 )
-
-// DefaultJenis is the fallback item type every item falls back to when the
-// type it was using gets deleted. It is auto-created in the master list on
-// demand, and cannot itself be deleted — otherwise a delete would have
-// nothing left to fall back to.
-const DefaultJenis = "Lainnya"
 
 type ItemTypeHandler struct {
 	repo     *repository.ItemTypeRepository
@@ -74,11 +69,16 @@ func (h *ItemTypeHandler) ListItemTypes(w http.ResponseWriter, r *http.Request) 
 
 // DeleteItemType: DELETE /api/v1/item-types/{id}
 //
-// Deleting a type is never blocked by items still using it — instead those
-// items are reassigned to DefaultJenis first, so no item is ever left with a
-// jenis that has no entry in the master list. That reassignment is a real,
-// permanent rewrite of those item documents (no soft delete, no audit log in
-// this phase), which is why the response reports how many were touched.
+// Blocked with 409 ITEM_TYPE_IN_USE while any item still carries this jenis
+// (matched case-insensitively, same as the uniqueness rule — "Laptop" and
+// "laptop" are one type, so items using either block deleting it).
+//
+// This replaces the earlier reassign-to-"Lainnya" behavior. Deleting a type
+// now never touches an item document at all: rewriting the jenis of an
+// unbounded number of items is a permanent, unauditable change (no soft
+// delete, no audit log in this phase), and which type they should actually
+// become is a call only the user can make. As a result "Lainnya" carries no
+// special meaning anymore.
 func (h *ItemTypeHandler) DeleteItemType(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	ctx := r.Context()
@@ -93,22 +93,15 @@ func (h *ItemTypeHandler) DeleteItemType(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if strings.EqualFold(strings.TrimSpace(itemType.Jenis), DefaultJenis) {
-		response.Err(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "Invalid item type fields",
-			map[string]string{"jenis": "the default item type cannot be deleted"})
-		return
-	}
-
-	// Guarantee the fallback exists before pointing items at it, so the
-	// invariant holds even on a database that has never seen it before.
-	if err := h.repo.EnsureExists(ctx, DefaultJenis); err != nil {
-		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete item type", nil)
-		return
-	}
-
-	reassigned, err := h.itemRepo.ReassignJenis(ctx, itemType.Jenis, DefaultJenis)
+	itemCount, err := h.itemRepo.CountByJenis(ctx, itemType.Jenis)
 	if err != nil {
 		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete item type", nil)
+		return
+	}
+	if itemCount > 0 {
+		response.ErrDetails(w, http.StatusConflict, "ITEM_TYPE_IN_USE",
+			"Item type is still used by "+strconv.FormatInt(itemCount, 10)+" item(s)",
+			map[string]interface{}{"jenis": itemType.Jenis, "itemCount": itemCount})
 		return
 	}
 
@@ -122,9 +115,7 @@ func (h *ItemTypeHandler) DeleteItemType(w http.ResponseWriter, r *http.Request)
 	}
 
 	response.OK(w, http.StatusOK, map[string]interface{}{
-		"_id":             id,
-		"jenis":           itemType.Jenis,
-		"defaultJenis":    DefaultJenis,
-		"reassignedItems": reassigned,
+		"_id":   id,
+		"jenis": itemType.Jenis,
 	}, nil)
 }
