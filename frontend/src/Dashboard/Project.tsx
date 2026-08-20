@@ -11,6 +11,7 @@ import DataTable from "./components/DataTable";
 import MainLayout from "../layouts/MainLayout";
 import { ProjectFormModal } from "../FormBarang/components/ProjectFormModal";
 import {
+  buildProjectRequest,
   createProject,
   deleteProject,
   fetchListOfProjects,
@@ -30,12 +31,18 @@ const COLUMNS: ColumnDef[] = [
   {
     label: "Nama Project",
     key: "namaProyek",
-    width: 440,
+    width: 320,
   },
   {
     label: "Lokasi",
     key: "lokasi",
-    width: 360,
+    width: 300,
+  },
+  {
+    label: "Koordinat",
+    key: "koordinat",
+    width: 200,
+    sortable: false,
   },
   {
     label: "Aksi",
@@ -93,11 +100,15 @@ const ProjectPage: React.FC = () => {
       const id = project._id.toLowerCase();
       const name = project.namaProyek.toLowerCase();
       const location = project.lokasi.toLowerCase();
+      const coordText = project.koordinat
+        ? `${project.koordinat.lat}, ${project.koordinat.lng}`
+        : "";
 
       return (
         id.includes(normalizedSearch) ||
         name.includes(normalizedSearch) ||
-        location.includes(normalizedSearch)
+        location.includes(normalizedSearch) ||
+        coordText.includes(normalizedSearch)
       );
     });
   }, [data.data, search]);
@@ -110,18 +121,25 @@ const ProjectPage: React.FC = () => {
     }
 
     return rows.sort((left, right) => {
-      const leftValue = String(
-        left[sortKey as keyof Project] ?? "",
-      ).toLowerCase();
-      const rightValue = String(
-        right[sortKey as keyof Project] ?? "",
-      ).toLowerCase();
+      const leftText =
+        sortKey === "koordinat"
+          ? left.koordinat
+            ? `${left.koordinat.lat}, ${left.koordinat.lng}`
+            : ""
+          : String(left[sortKey as keyof Project] ?? "").toLowerCase();
 
-      if (leftValue === rightValue) {
+      const rightText =
+        sortKey === "koordinat"
+          ? right.koordinat
+            ? `${right.koordinat.lat}, ${right.koordinat.lng}`
+            : ""
+          : String(right[sortKey as keyof Project] ?? "").toLowerCase();
+
+      if (leftText === rightText) {
         return 0;
       }
 
-      const result = leftValue > rightValue ? 1 : -1;
+      const result = leftText > rightText ? 1 : -1;
       return sortDirection === "asc" ? result : -result;
     });
   }, [filteredRows, sortDirection, sortKey]);
@@ -156,6 +174,8 @@ const ProjectPage: React.FC = () => {
       id: targetProject._id,
       name: targetProject.namaProyek,
       location: targetProject.lokasi,
+      lat: targetProject.koordinat ? String(targetProject.koordinat.lat) : "",
+      lng: targetProject.koordinat ? String(targetProject.koordinat.lng) : "",
     });
     setIsModalOpen(true);
   };
@@ -180,21 +200,22 @@ const ProjectPage: React.FC = () => {
   };
 
   const handleSubmit = (formData: ProjectFormData) => {
+    const request = buildProjectRequest({
+      name: formData.name,
+      location: formData.location,
+      lat: formData.lat ?? "",
+      lng: formData.lng ?? "",
+    });
+
     if (formData.id) {
-      updateProject(formData.id, {
-        namaProyek: formData.name,
-        lokasi: formData.location,
-      })
+      updateProject(formData.id, request)
         .then(() => fetchListOfProjects().then((resp) => setData(resp)))
         .catch((err) => {
           console.error("Failed to update project:", err);
           alert("Gagal memperbarui project. Silakan coba lagi.");
         });
     } else {
-      createProject({
-        namaProyek: formData.name,
-        lokasi: formData.location,
-      })
+      createProject(request)
         .then(() => fetchListOfProjects().then((resp) => setData(resp)))
         .catch((err) => {
           console.error("Failed to create project:", err);
@@ -202,6 +223,13 @@ const ProjectPage: React.FC = () => {
         });
     }
   };
+
+  const rows = sortedRows.map((project) => ({
+    ...project,
+    koordinat: project.koordinat
+      ? `${project.koordinat.lat}, ${project.koordinat.lng}`
+      : "— belum dipetakan",
+  }));
 
   return (
     <MainLayout>
@@ -272,7 +300,7 @@ const ProjectPage: React.FC = () => {
         ) : (
           <DataTable
             columns={COLUMNS}
-            rows={sortedRows}
+            rows={rows}
             sortKey={sortKey}
             sortDirection={sortDirection}
             onSortChange={handleSortChange}

@@ -41,10 +41,16 @@ export interface BackendItem {
   updatedAt: string;
 }
 
+export interface ProjectCoordinate {
+  lat: number;
+  lng: number;
+}
+
 export interface Project {
   _id: string;
   namaProyek: string;
   lokasi: string;
+  koordinat?: ProjectCoordinate | null;
 }
 
 export interface Jenis {

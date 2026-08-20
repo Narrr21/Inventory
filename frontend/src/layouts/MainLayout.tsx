@@ -32,6 +32,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   // Cek apakah halaman aktif adalah /dashboard
   const isDashboardActive = location.pathname === "/dashboard";
   const isProjectActive = location.pathname === "/project";
+  const isMapActive = location.pathname === "/map";
   const isAnalyticActive = location.pathname === "/analytic";
 
   return (
@@ -125,7 +126,23 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               </Button>
               <Button
                 component={Link}
-                to="/"
+                to="/map"
+                sx={{
+                  color: isMapActive ? "primary.contrastText" : "text.primary",
+                  bgcolor: isMapActive ? "primary.dark" : "transparent",
+                  fontWeight: isMapActive ? 600 : 500,
+                  "&:hover": isMapActive
+                    ? {}
+                    : {
+                        bgcolor: "action.hover",
+                      },
+                }}
+              >
+                Map
+              </Button>
+              <Button
+                component={Link}
+                to="/analytic"
                 sx={{
                   color: isAnalyticActive
                     ? "primary.contrastText"
