@@ -35,16 +35,19 @@ const COLUMNS: ColumnDef[] = [
     label: "ID",
     key: "_id",
     width: 100,
+    copy: true,
   },
   {
     label: "Nama Barang",
     key: "nama",
     width: 300,
+    copy: true,
   },
   {
     label: "Serial Number",
     key: "serialNumber",
     width: 150,
+    copy: true,
   },
   {
     label: "Project",

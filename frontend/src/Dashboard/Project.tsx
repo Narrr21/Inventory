@@ -27,11 +27,13 @@ const COLUMNS: ColumnDef[] = [
     label: "ID",
     key: "_id",
     width: 220,
+    copy: true,
   },
   {
     label: "Nama Project",
     key: "namaProyek",
-    width: 320,
+    width: 310,
+    copy: true,
   },
   {
     label: "Lokasi",

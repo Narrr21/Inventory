@@ -7,6 +7,8 @@ export interface ColumnDef {
   width?: number;
   /** default true. set false untuk kolom yang tidak bisa di-sort */
   sortable?: boolean;
+  /** default false. jika true, tampilkan tombol salin per-cell */
+  copy?: boolean;
 }
 
 export type SortDirection = "asc" | "desc";

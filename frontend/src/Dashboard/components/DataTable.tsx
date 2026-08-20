@@ -9,6 +9,8 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import CheckIcon from "@mui/icons-material/Check";
 import type { ColumnDef, SortDirection } from "../../types/dashboard";
 
 type RowWithId = {
@@ -40,6 +42,16 @@ const DataTable = <T extends RowWithId>({
   onDeleteClick,
 }: DataTableProps<T>) => {
   const hasRowActions = Boolean(onEditClick || onDeleteClick);
+
+  const handleCopy = async (text: string) => {
+    if (!text) return;
+
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // noop: clipboard failures should not block the table UI
+    }
+  };
 
   return (
     <Box
@@ -207,6 +219,7 @@ const DataTable = <T extends RowWithId>({
                 const value = (row as Record<string, unknown>)[col.key];
                 const text =
                   value === undefined || value === null ? "" : String(value);
+                const canCopy = Boolean(col.copy);
 
                 return (
                   <Box
@@ -220,6 +233,7 @@ const DataTable = <T extends RowWithId>({
                       justifyContent: "center",
                       py: 1,
                       px: 1,
+                      gap: 0.5,
                     }}
                   >
                     <Tooltip
@@ -230,11 +244,36 @@ const DataTable = <T extends RowWithId>({
                         variant="body2"
                         noWrap
                         align="center"
-                        sx={{ maxWidth: "100%" }}
+                        sx={{
+                          maxWidth: canCopy ? "calc(100% - 24px)" : "100%",
+                        }}
                       >
                         {text}
                       </Typography>
                     </Tooltip>
+
+                    {canCopy && text && (
+                      <Tooltip title="Salin">
+                        <IconButton
+                          size="small"
+                          aria-label={`copy ${col.key}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleCopy(text);
+                          }}
+                          sx={{
+                            width: 20,
+                            height: 20,
+                            color: "text.secondary",
+                            "&:hover": {
+                              bgcolor: "action.hover",
+                            },
+                          }}
+                        >
+                          <ContentCopyIcon sx={{ fontSize: 14 }} />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                   </Box>
                 );
               })}
