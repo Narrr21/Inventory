@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { InputAdornment, TextField } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
-import { useDebounce } from "../hooks/useDebounce";
+import { useDebounce } from "../useDebounce";
 
 interface SearchBarProps {
   placeholder?: string;

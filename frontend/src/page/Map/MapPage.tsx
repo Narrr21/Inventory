@@ -3,8 +3,8 @@ import { Alert, Box, Chip, Divider, Paper, Typography } from "@mui/material";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { ProjectMapBounds, ProjectMapResponse } from "../api/AnalyticsAPI";
-import { fetchProjectMap } from "../api/AnalyticsAPI";
+import type { ProjectMapBounds, ProjectMapResponse } from "../../types/api";
+import { fetchProjectMap } from "../../api/analyticsAPI";
 import MainLayout from "../layouts/MainLayout";
 
 const DEFAULT_BOUNDS: ProjectMapBounds = {

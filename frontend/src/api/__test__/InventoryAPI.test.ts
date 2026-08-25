@@ -3,7 +3,7 @@ import {
   buildProjectRequest,
   fetchJenisSuggestions,
   normalizeProjectCoordinateInput,
-} from "../InventoryAPI";
+} from "../inventoryAPI";
 
 describe("fetchJenisSuggestions", () => {
   beforeEach(() => {

@@ -4,10 +4,10 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import Dashboard from "./Dashboard/Dashboard";
-import ProjectPage from "./Dashboard/Project";
-import AnalyticPage from "./Analytic/AnalyticPage";
-import MapPage from "./Map/MapPage";
+import Dashboard from "./page/Dashboard/Dashboard";
+import ProjectPage from "./page/Project/Project";
+import AnalyticPage from "./page/Analytic/AnalyticPage";
+import MapPage from "./page/Map/MapPage";
 
 function App() {
   return (

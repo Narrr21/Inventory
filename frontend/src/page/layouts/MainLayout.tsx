@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   AppBar,
   Toolbar,
@@ -13,15 +13,38 @@ import type { PaletteMode } from "@mui/material";
 import Brightness4Icon from "@mui/icons-material/Brightness4";
 import Brightness7Icon from "@mui/icons-material/Brightness7";
 import { Link, useLocation } from "react-router-dom"; // Import routing
-import { getDesignTokens } from "../ColorPalette";
+import { getDesignTokens } from "../../ColorPalette";
 
 interface MainLayoutProps {
   children: React.ReactNode;
 }
 
+const COLOR_MODE_STORAGE_KEY = "inventory-color-mode";
+
+const getStoredColorMode = (): PaletteMode => {
+  if (typeof window === "undefined") return "light";
+
+  try {
+    const storedMode = window.localStorage.getItem(COLOR_MODE_STORAGE_KEY);
+    return storedMode === "dark" || storedMode === "light"
+      ? storedMode
+      : "light";
+  } catch {
+    return "light";
+  }
+};
+
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
-  const [mode, setMode] = useState<PaletteMode>("light");
+  const [mode, setMode] = useState<PaletteMode>(getStoredColorMode);
   const location = useLocation(); // Ambil lokasi URL saat ini
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(COLOR_MODE_STORAGE_KEY, mode);
+    } catch {
+      return;
+    }
+  }, [mode]);
 
   const toggleColorMode = () => {
     setMode((prevMode) => (prevMode === "light" ? "dark" : "light"));

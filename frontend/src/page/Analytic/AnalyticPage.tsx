@@ -23,7 +23,7 @@ import {
   fetchAnalyticsTimeline,
   type AnalyticsSummaryData,
   type AnalyticsTimelineData,
-} from "../api/AnalyticsAPI";
+} from "../../api/analyticsAPI";
 
 const STATUS_COLORS: Record<string, string> = {
   Healthy: "#2e7d32",

@@ -2,7 +2,7 @@ import React from "react";
 import { Box, Typography, Button } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import { BaseRow } from "./BaseRow";
-import type { FieldInfo } from "../../types/form";
+import type { FieldInfo } from "../../../types/form";
 
 interface BaseSectionProps {
   label: string;
@@ -28,7 +28,15 @@ export const BaseSection: React.FC<BaseSectionProps> = ({
         mb: 1,
       }}
     >
-      <Typography variant="subtitle1" sx={{ fontWeight: 700, borderBottom: "1px solid", borderColor: "divider", pb: 0.5 }}>
+      <Typography
+        variant="subtitle1"
+        sx={{
+          fontWeight: 700,
+          borderBottom: "1px solid",
+          borderColor: "divider",
+          pb: 0.5,
+        }}
+      >
         {label}
       </Typography>
 
@@ -41,7 +49,9 @@ export const BaseSection: React.FC<BaseSectionProps> = ({
             placeholder={field.placeholder}
             required={!field.nullable}
             editableLabel={true}
-            onLabelChange={(newLabel) => onChangeField(field.id, { label: newLabel })}
+            onLabelChange={(newLabel) =>
+              onChangeField(field.id, { label: newLabel })
+            }
             onChange={(val) => onChangeField(field.id, { value: val })}
           />
         ))}

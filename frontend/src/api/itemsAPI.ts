@@ -1,49 +1,10 @@
-import type { BackendItem, Project } from "../types/dashboard";
-
-export interface CreateItemRequest {
-  jenis: string;
-  serialNumber: string;
-  nama?: string;
-  idProyek: string;
-  status: string;
-  licenseWindows?: string;
-  licenseOffice?: string;
-  deskripsi?: string;
-  credentials?: Record<string, string>;
-  remoteInfo?: Record<string, string>;
-  customAttributes?: Record<string, string>;
-}
-
-export interface CreateItemResponse {
-  success: boolean;
-  data: BackendItem;
-}
-
-export interface UpdateItemRequest {
-  jenis?: string;
-  serialNumber?: string;
-  nama?: string;
-  idProyek?: string;
-  status?: string;
-  licenseWindows?: string;
-  licenseOffice?: string;
-  deskripsi?: string;
-  credentials?: Record<string, string>;
-  remoteInfo?: Record<string, string>;
-  customAttributes?: Record<string, string>;
-}
-
-export interface UpdateItemResponse {
-  success: boolean;
-  data: BackendItem;
-}
-
-export interface DeleteItemResponse {
-  success: boolean;
-  data: {
-    _id: string;
-  };
-}
+import type {
+  CreateItemRequest,
+  CreateItemResponse,
+  DeleteItemResponse,
+  UpdateItemRequest,
+  UpdateItemResponse,
+} from "../types/api";
 
 async function createItemAPI(
   req: CreateItemRequest,

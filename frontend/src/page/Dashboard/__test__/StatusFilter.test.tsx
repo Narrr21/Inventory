@@ -1,6 +1,6 @@
 import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import StatusFilter from "../components/StatusFilter";
+import StatusFilter from "../../../utils/Table/StatusFilter";
 import { describe, expect, it, vi } from "vitest";
 
 describe("StatusFilter Component", () => {

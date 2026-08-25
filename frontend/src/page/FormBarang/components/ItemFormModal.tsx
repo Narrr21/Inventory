@@ -5,14 +5,14 @@ import { BaseRow } from "./BaseRow";
 import { BaseAutocomplete } from "./BaseAutocomplete";
 import { BaseDropdown } from "./BaseDropdown";
 import { BaseSection } from "./BaseSection";
-import type { FieldInfo, ItemFormData } from "../../types/form";
-import type { Project, Jenis } from "../../types/dashboard";
-import { useDebounce } from "../../Dashboard/hooks/useDebounce";
+import type { FieldInfo, ItemFormData } from "../../../types/form";
+import type { Project, Jenis } from "../../../types/dashboard";
+import { useDebounce } from "../../../utils/useDebounce";
 import {
   addJenisSuggestion,
   deleteJenisSuggestion,
   fetchJenisSuggestions,
-} from "../../api/InventoryAPI";
+} from "../../../api/inventoryAPI";
 
 interface ItemFormModalProps {
   open: boolean;
@@ -180,20 +180,24 @@ export const ItemFormModal: React.FC<ItemFormModalProps> = ({
 
     if (!confirmed) return;
 
-    const response = await deleteJenisSuggestion(id);
-    const data = response.data;
-    const normalized = Array.isArray(data) ? data : data ? [data] : [];
-    // if backend returns remaining list, use it; else remove deleted from current
-    if (normalized.length > 0) {
-      setJenisSuggestions(normalized);
-    } else {
-      setJenisSuggestions((prev) => prev.filter((j) => j._id !== id));
-    }
+    try {
+      const response = await deleteJenisSuggestion(id);
+      const data = response.data;
+      const normalized = Array.isArray(data) ? data : data ? [data] : [];
+      // if backend returns remaining list, use it; else remove deleted from current
+      if (normalized.length > 0) {
+        setJenisSuggestions(normalized);
+      } else {
+        setJenisSuggestions((prev) => prev.filter((j) => j._id !== id));
+      }
 
-    setFormData((prev) =>
-      prev.jenis === name ? { ...prev, jenis: "" } : prev,
-    );
-    setJenisInput((prev) => (prev === name ? "" : prev));
+      setFormData((prev) =>
+        prev.jenis === name ? { ...prev, jenis: "" } : prev,
+      );
+      setJenisInput((prev) => (prev === name ? "" : prev));
+    } catch {
+      window.alert("Gagal menghapus jenis. Silakan coba lagi.");
+    }
   };
 
   return (

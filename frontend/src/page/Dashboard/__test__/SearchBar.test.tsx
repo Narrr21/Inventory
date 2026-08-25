@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
-import SearchBar from "../components/SearchBar";
+import SearchBar from "../../../utils/Table/SearchBar";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 describe("SearchBar Component", () => {

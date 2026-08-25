@@ -1,23 +1,19 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, Box, Button, Pagination, Typography } from "@mui/material";
-import ControlRow from "./components/ControlRow";
-import DataTable from "./components/DataTable";
-import {
-  fetchFilterOptions,
-  fetchInventory,
-  type FilterOptionsResponse,
-  type InventoryResponse,
-} from "../api/InventoryAPI";
-import { createItem, updateItem, deleteItemAPI } from "../api/CRUDitems";
-import type { ColumnDef, SortDirection } from "../types/dashboard";
-import type { ItemFormData } from "../types/form";
+import ControlRow from "../../utils/Table/ControlRow";
+import DataTable from "../../utils/Table/DataTable";
+import { fetchFilterOptions, fetchInventory } from "../../api/inventoryAPI";
+import { createItem, updateItem, deleteItemAPI } from "../../api/itemsAPI";
+import type { ColumnDef, SortDirection } from "../../types/dashboard";
+import type { FilterOptionsResponse, InventoryResponse } from "../../types/api";
+import type { ItemFormData } from "../../types/form";
 import MainLayout from "../layouts/MainLayout";
 import { ItemFormModal } from "../FormBarang/components/ItemFormModal";
 import {
   mapBackendToItemForm,
   mapItemFormToCreateRequest,
   mapItemFormToUpdateRequest,
-} from "../api/ItemMapper";
+} from "../../api/mappper";
 
 const PAGE_SIZE = 10;
 

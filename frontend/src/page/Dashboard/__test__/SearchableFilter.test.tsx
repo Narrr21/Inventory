@@ -1,10 +1,6 @@
-import {
-  render,
-  screen,
-  act,
-} from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import SearchableFilter from "../components/SearchableFilter";
+import SearchableFilter from "../../../utils/Table/SearchableFilter";
 import { describe, expect, it, vi } from "vitest";
 
 describe("SearchableFilter Component", () => {

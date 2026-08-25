@@ -7,7 +7,7 @@ import {
   Typography,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import type { Jenis } from "../../types/dashboard";
+import type { Jenis } from "../../../types/dashboard";
 
 interface AddOption {
   inputValue: string;

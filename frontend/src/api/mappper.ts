@@ -3,7 +3,7 @@
 import type { ItemFormData } from "../types/form";
 import type { FieldInfo } from "../types/form";
 import type { BackendItem } from "../types/dashboard";
-import type { CreateItemRequest, UpdateItemRequest } from "./CRUDitems";
+import type { CreateItemRequest, UpdateItemRequest } from "../types/api";
 
 // Helper konversi objek { [key]: value } dari backend ke FieldInfo[]
 const mapObjectToFields = (obj?: Record<string, string>): FieldInfo[] => {
@@ -67,7 +67,9 @@ export const mapItemFormToBackend = (formData: ItemFormData): BackendItem => {
   };
 };
 
-export const mapItemFormToCreateRequest = (formData: ItemFormData): CreateItemRequest => {
+export const mapItemFormToCreateRequest = (
+  formData: ItemFormData,
+): CreateItemRequest => {
   return {
     jenis: formData.jenis,
     serialNumber: formData.serial_number,
@@ -81,9 +83,11 @@ export const mapItemFormToCreateRequest = (formData: ItemFormData): CreateItemRe
     remoteInfo: mapFieldsToObject(formData.remoteInfo),
     customAttributes: mapFieldsToObject(formData.customAttributes),
   };
-}
+};
 
-export const mapItemFormToUpdateRequest = (formData: ItemFormData): Partial<UpdateItemRequest> => {
+export const mapItemFormToUpdateRequest = (
+  formData: ItemFormData,
+): Partial<UpdateItemRequest> => {
   return {
     jenis: formData.jenis,
     serialNumber: formData.serial_number,
@@ -97,4 +101,4 @@ export const mapItemFormToUpdateRequest = (formData: ItemFormData): Partial<Upda
     remoteInfo: mapFieldsToObject(formData.remoteInfo),
     customAttributes: mapFieldsToObject(formData.customAttributes),
   };
-}
+};

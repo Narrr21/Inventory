@@ -1,76 +1,18 @@
 import type {
-  SortDirection,
-  BackendItem,
-  Project,
-  Jenis,
-} from "../types/dashboard";
-
-export interface InventoryQueryParams {
-  jenis?: string;
-  status?: string;
-  proyek?: string;
-  search?: string;
-  sortBy?: string;
-  sortOrder?: SortDirection;
-  page: number;
-  limit: number;
-}
-
-export interface InventoryResponse {
-  success: boolean;
-  data: BackendItem[];
-  meta: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  };
-}
-
-export interface FilterOptionsResponse {
-  success: boolean;
-  data: {
-    project: Project[];
-    jenis: Jenis[];
-    status: string[];
-  };
-}
-
-export interface ListOfProjectsResponse {
-  success: boolean;
-  data: Project[];
-}
-
-export interface JenisSuggestionsResponse {
-  success: boolean;
-  data: Jenis[];
-}
-
-export interface AddJenisResponse {
-  success: boolean;
-  data: Jenis[];
-}
-export interface DeleteJenisResponse {
-  success: boolean;
-  data: {
-    _id: string;
-    jenis: string;
-    defaultJenis: string;
-    reassignedItems: number;
-  };
-}
-
-export interface DeleteProjectResponse {
-  success: boolean;
-  data: {
-    _id: string;
-  };
-}
-
-export interface ProjectCoordinateInput {
-  lat: number | null;
-  lng: number | null;
-}
+  AddJenisResponse,
+  CreateProjectRequest,
+  CreateProjectResponse,
+  DeleteJenisResponse,
+  DeleteProjectResponse,
+  FilterOptionsResponse,
+  InventoryQueryParams,
+  InventoryResponse,
+  JenisSuggestionsResponse,
+  ListOfProjectsResponse,
+  ProjectCoordinateInput,
+  UpdateProjectRequest,
+  UpdateProjectResponse,
+} from "../types/api";
 
 const toApiUrl = (path: string): string => {
   if (typeof window !== "undefined" && window.location?.origin) {
@@ -79,23 +21,6 @@ const toApiUrl = (path: string): string => {
 
   return new URL(path, "http://localhost").toString();
 };
-
-export interface CreateProjectRequest {
-  namaProyek: string;
-  lokasi: string;
-  koordinat: ProjectCoordinateInput | null;
-}
-
-export interface CreateProjectResponse {
-  success: boolean;
-  data: Project;
-}
-
-export interface UpdateProjectRequest {
-  namaProyek?: string;
-  lokasi?: string;
-  koordinat?: ProjectCoordinateInput | null;
-}
 
 export function normalizeProjectCoordinateInput(
   latInput: string,
@@ -160,14 +85,9 @@ export function buildProjectRequest(input: {
   };
 }
 
-export interface UpdateProjectResponse {
-  success: boolean;
-  data: Project;
-}
-
 // API
 
-async function fetchInventoryApi(
+export async function fetchInventory(
   params: InventoryQueryParams,
   signal?: AbortSignal,
 ): Promise<InventoryResponse> {
@@ -187,7 +107,7 @@ async function fetchInventoryApi(
   return (await res.json()) as InventoryResponse;
 }
 
-async function fetchFilterOptionsApi(
+export async function fetchFilterOptions(
   signal?: AbortSignal,
 ): Promise<FilterOptionsResponse> {
   const res = await fetch(toApiUrl("/api/v1/items/filter-options"), { signal });
@@ -259,7 +179,7 @@ export async function deleteProject(
   return (await res.json()) as DeleteProjectResponse;
 }
 
-async function fetchJenisSuggestionsApi(
+export async function fetchJenisSuggestions(
   query: string,
   signal?: AbortSignal,
 ): Promise<JenisSuggestionsResponse> {
@@ -301,26 +221,4 @@ export async function deleteJenisSuggestion(
 
   if (!res.ok) throw new Error("Gagal menghapus suggestion jenis");
   return (await res.json()) as DeleteJenisResponse;
-}
-
-// EXPORT
-
-export async function fetchInventory(
-  params: InventoryQueryParams,
-  signal?: AbortSignal,
-): Promise<InventoryResponse> {
-  return fetchInventoryApi(params, signal);
-}
-
-export async function fetchFilterOptions(
-  signal?: AbortSignal,
-): Promise<FilterOptionsResponse> {
-  return fetchFilterOptionsApi(signal);
-}
-
-export async function fetchJenisSuggestions(
-  query: string,
-  signal?: AbortSignal,
-): Promise<JenisSuggestionsResponse> {
-  return fetchJenisSuggestionsApi(query, signal);
 }

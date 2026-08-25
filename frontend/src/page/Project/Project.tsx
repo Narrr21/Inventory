@@ -7,7 +7,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import DataTable from "./components/DataTable";
+import DataTable from "../../utils/Table/DataTable";
 import MainLayout from "../layouts/MainLayout";
 import { ProjectFormModal } from "../FormBarang/components/ProjectFormModal";
 import {
@@ -16,9 +16,9 @@ import {
   deleteProject,
   fetchListOfProjects,
   updateProject,
-  type ListOfProjectsResponse,
-} from "../api/InventoryAPI";
-import type { ColumnDef, SortDirection, Project } from "../types/dashboard";
+} from "../../api/inventoryAPI";
+import type { ColumnDef, SortDirection, Project } from "../../types/dashboard";
+import type { ListOfProjectsResponse } from "../../types/api";
 import type { ProjectFormData } from "../FormBarang/components/ProjectFormModal";
 import SearchIcon from "@mui/icons-material/Search";
 
