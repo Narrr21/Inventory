@@ -1,113 +1,406 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
-	"time"
+	"strconv"
+	"strings"
 
-	"my-backend/internal/mocks"
+	"my-backend/internal/models"
+	"my-backend/internal/repository"
 	"my-backend/internal/response"
+
+	"github.com/go-chi/chi/v5"
 )
 
-func decodeBody(r *http.Request) map[string]interface{} {
-	var body map[string]interface{}
-	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&body)
+type ItemHandler struct {
+	repo         *repository.ItemRepository
+	projectRepo  *repository.ProjectRepository
+	itemTypeRepo *repository.ItemTypeRepository
+}
+
+func NewItemHandler(repo *repository.ItemRepository, projectRepo *repository.ProjectRepository, itemTypeRepo *repository.ItemTypeRepository) *ItemHandler {
+	return &ItemHandler{repo: repo, projectRepo: projectRepo, itemTypeRepo: itemTypeRepo}
+}
+
+// registerJenis adds the item's jenis to the item-type master list if it
+// isn't there yet. Item.Jenis stays free-text — this is not a foreign key
+// check and never rejects anything — but it keeps the master list (which is
+// what the jenis dropdown reads from) complete, so a jenis typed straight
+// into POST/PATCH /items shows up as a suggestion afterwards without the
+// client having to call POST /item-types itself. Best-effort by design: a
+// failure here must not fail an otherwise valid item write.
+func (h *ItemHandler) registerJenis(ctx context.Context, jenis string) {
+	_ = h.itemTypeRepo.EnsureExists(ctx, jenis)
+}
+
+// noSuchProjectSentinel is used as the idProyek filter value when a
+// namaProyek query param doesn't resolve to any project — guaranteed to
+// never match a real item, since real idProyek values are always 24-char
+// Mongo ObjectId hex strings.
+const noSuchProjectSentinel = "__no_such_project__"
+
+// knownItemFields are the client-writable top-level JSON keys the Item model
+// declares.
+var knownItemFields = map[string]bool{
+	"jenis": true, "serialNumber": true, "nama": true, "idProyek": true,
+	"credentials": true, "remoteInfo": true, "licenseWindows": true, "licenseOffice": true,
+	"status": true, "deskripsi": true,
+}
+
+// readOnlyItemFields are keys a client may send but never control. They are
+// dropped outright rather than folded into customAttributes — echoing a
+// client-supplied createdAt back as an ad-hoc attribute would be worse than
+// ignoring it.
+//
+// createdAt/updatedAt being here is what stops a PATCH from backdating an
+// item: the repository stamps updatedAt on every write, but createdAt was
+// previously just another writable field, so a client could rewrite an item's
+// creation date and quietly skew /analytics/timeline with it.
+var readOnlyItemFields = map[string]bool{
+	"_id": true, "namaProyek": true, "createdAt": true, "updatedAt": true,
+}
+
+// splitCustomAttributes separates raw's top-level keys into recognized Item
+// fields (returned as-is in known) and everything else (returned in custom).
+// Any customAttributes object the client sent explicitly is folded into
+// custom too. This is what makes "add a new column out of nowhere" actually
+// work: an unrecognized field is never silently dropped (as Create used to)
+// or written straight into the document root ungoverned (as Update used to)
+// — it always lands in the one place the schema reserves for ad-hoc data.
+func splitCustomAttributes(raw map[string]interface{}) (known map[string]interface{}, custom map[string]interface{}) {
+	known = make(map[string]interface{}, len(raw))
+	custom = make(map[string]interface{})
+
+	if explicit, ok := raw["customAttributes"].(map[string]interface{}); ok {
+		for k, v := range explicit {
+			custom[k] = v
+		}
 	}
-	return body
+
+	for k, v := range raw {
+		if k == "customAttributes" || readOnlyItemFields[k] {
+			continue
+		}
+		if knownItemFields[k] {
+			known[k] = v
+			continue
+		}
+		custom[k] = v
+	}
+
+	return known, custom
+}
+
+// buildNamaProyekIndex fetches every project once and returns a lookup
+// from idProyek -> namaProyek, used to denormalize a project's display name
+// onto Item responses without a per-item round trip. A lookup failure is
+// swallowed (empty index) rather than failing the whole request — namaProyek
+// is a convenience field, not load-bearing.
+func buildNamaProyekIndex(ctx context.Context, projects *repository.ProjectRepository) map[string]string {
+	list, err := projects.List(ctx)
+	if err != nil {
+		return map[string]string{}
+	}
+	index := make(map[string]string, len(list))
+	for _, p := range list {
+		index[p.ID] = p.NamaProyek
+	}
+	return index
+}
+
+// resolveNamaProyek looks up a single project's name for one item. Like
+// buildNamaProyekIndex, a lookup failure just leaves the name empty.
+func (h *ItemHandler) resolveNamaProyek(ctx context.Context, idProyek string) string {
+	project, err := h.projectRepo.GetByID(ctx, idProyek)
+	if err != nil {
+		return ""
+	}
+	return project.NamaProyek
+}
+
+// validate checks required fields on item and, if idProyek is set, that it
+// references an existing project. Returns a field->message map; empty means
+// valid. This is the UC01/UC02 "validasiField" step.
+func (h *ItemHandler) validate(ctx context.Context, item models.Item) map[string]string {
+	fields := map[string]string{}
+
+	required := map[string]string{
+		"jenis":        item.Jenis,
+		"serialNumber": item.SerialNumber,
+		"status":       item.Status,
+		"idProyek":     item.IdProyek,
+	}
+	for field, value := range required {
+		if strings.TrimSpace(value) == "" {
+			fields[field] = field + " is required"
+		}
+	}
+
+	if _, missing := fields["idProyek"]; !missing {
+		exists, err := h.projectRepo.Exists(ctx, item.IdProyek)
+		if err == nil && !exists {
+			fields["idProyek"] = "referenced project does not exist"
+		}
+	}
+
+	return fields
 }
 
 // CreateItem: POST /api/v1/items
-func CreateItem(w http.ResponseWriter, r *http.Request) {
-	body := decodeBody(r)
-	item := mocks.MergeItem(mocks.Items[0], body)
-	item.ID = "665f1a1a1a1a1a1a1a1a1a99"
-	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
-	item.CreatedAt = now
-	item.UpdatedAt = now
-	response.OK(w, http.StatusCreated, item, nil)
+func (h *ItemHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
+	raw, err := decodeJSONObject(r)
+	if err != nil {
+		response.Err(w, http.StatusBadRequest, "MALFORMED_BODY", "Request body is not a valid JSON object", nil)
+		return
+	}
+	known, custom := splitCustomAttributes(raw)
+	if len(custom) > 0 {
+		known["customAttributes"] = custom
+	}
+
+	knownBytes, _ := json.Marshal(known)
+	var item models.Item
+	_ = json.Unmarshal(knownBytes, &item)
+	item.EnsureMaps()
+
+	if fields := h.validate(r.Context(), item); len(fields) > 0 {
+		response.Err(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "Invalid item fields", fields)
+		return
+	}
+
+	created, err := h.repo.Create(r.Context(), item)
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create item", nil)
+		return
+	}
+	h.registerJenis(r.Context(), created.Jenis)
+	created.NamaProyek = h.resolveNamaProyek(r.Context(), created.IdProyek)
+	response.OK(w, http.StatusCreated, created, nil)
 }
 
 // ListItems: GET /api/v1/items
-func ListItems(w http.ResponseWriter, r *http.Request) {
-	items := make([]mocks.ItemPublic, 0, len(mocks.Items))
-	for _, it := range mocks.Items {
+func (h *ItemHandler) ListItems(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+
+	page, _ := strconv.Atoi(q.Get("page"))
+	limit, _ := strconv.Atoi(q.Get("limit"))
+
+	filters := make(map[string]string)
+	for _, field := range []string{
+		"jenis", "serialNumber", "nama", "idProyek", "status",
+		"licenseWindows", "licenseOffice",
+		"credentials.account", "remoteInfo.ipAddress", "remoteInfo.anydesk", "remoteInfo.rustdesk",
+		"q",
+	} {
+		if v := q.Get(field); v != "" {
+			filters[field] = v
+		}
+	}
+	// customAttributes keys are arbitrary and unknown ahead of time, so they
+	// can't be enumerated in the fixed field list above — pass any
+	// customAttributes.<key> query param straight through.
+	for key, values := range q {
+		if strings.HasPrefix(key, "customAttributes.") && len(values) > 0 && values[0] != "" {
+			filters[key] = values[0]
+		}
+	}
+
+	// namaProyek is an alternate way to filter by project — resolved to
+	// idProyek server-side, since that's what's actually stored on Item. A
+	// literal idProyek param always takes precedence if both are sent.
+	if namaProyek := q.Get("namaProyek"); namaProyek != "" && filters["idProyek"] == "" {
+		project, err := h.projectRepo.GetByName(r.Context(), namaProyek)
+		switch {
+		case errors.Is(err, repository.ErrNotFound):
+			// No such project — zero results, not an error, consistent with
+			// how an unmatched idProyek or customAttributes filter behaves.
+			filters["idProyek"] = noSuchProjectSentinel
+		case err != nil:
+			response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to resolve namaProyek", nil)
+			return
+		default:
+			filters["idProyek"] = project.ID
+		}
+	}
+
+	result, err := h.repo.List(r.Context(), repository.ListParams{
+		Page:      page,
+		Limit:     limit,
+		SortBy:    q.Get("sortBy"),
+		SortOrder: q.Get("sortOrder"),
+		Filters:   filters,
+
+		CreatedFrom: q.Get("createdFrom"),
+		CreatedTo:   q.Get("createdTo"),
+		UpdatedFrom: q.Get("updatedFrom"),
+		UpdatedTo:   q.Get("updatedTo"),
+	})
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list items", nil)
+		return
+	}
+
+	namaProyekByID := buildNamaProyekIndex(r.Context(), h.projectRepo)
+	items := make([]models.ItemPublic, 0, len(result.Items))
+	for _, it := range result.Items {
+		it.EnsureMaps()
+		it.NamaProyek = namaProyekByID[it.IdProyek]
 		items = append(items, it.Public())
 	}
 	meta := map[string]interface{}{
-		"total":      len(mocks.Items),
-		"page":       1,
-		"limit":      20,
-		"totalPages": 1,
+		"total":      result.Total,
+		"page":       result.Page,
+		"limit":      result.Limit,
+		"totalPages": result.TotalPages,
 	}
 	response.OK(w, http.StatusOK, items, meta)
 }
 
 // GetItem: GET /api/v1/items/{id}
-func GetItem(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if id == "notfound" {
+func (h *ItemHandler) GetItem(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	item, err := h.repo.GetByID(r.Context(), id)
+	if errors.Is(err, repository.ErrNotFound) {
 		response.Err(w, http.StatusNotFound, "NOT_FOUND", "Item not found", nil)
 		return
 	}
-	response.OK(w, http.StatusOK, mocks.Items[0], nil)
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get item", nil)
+		return
+	}
+	item.EnsureMaps()
+	item.NamaProyek = h.resolveNamaProyek(r.Context(), item.IdProyek)
+	response.OK(w, http.StatusOK, item, nil)
 }
 
 // UpdateItem: PATCH /api/v1/items/{id}
-func UpdateItem(w http.ResponseWriter, r *http.Request) {
-	body := decodeBody(r)
-	item := mocks.MergeItem(mocks.Items[0], body)
+func (h *ItemHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	raw, err := decodeJSONObject(r)
+	if err != nil {
+		response.Err(w, http.StatusBadRequest, "MALFORMED_BODY", "Request body is not a valid JSON object", nil)
+		return
+	}
+	known, custom := splitCustomAttributes(raw)
+
+	existing, err := h.repo.GetByID(r.Context(), id)
+	if errors.Is(err, repository.ErrNotFound) {
+		response.Err(w, http.StatusNotFound, "NOT_FOUND", "Item not found", nil)
+		return
+	}
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update item", nil)
+		return
+	}
+
+	merged := models.MergeItem(existing, known)
+	if fields := h.validate(r.Context(), merged); len(fields) > 0 {
+		response.Err(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "Invalid item fields", fields)
+		return
+	}
+
+	// customAttributes entries are $set by dotted key (customAttributes.foo),
+	// not as a whole subdocument, so adding one ad-hoc attribute in this PATCH
+	// doesn't wipe out attributes set by an earlier PATCH.
+	patch := known
+	for k, v := range custom {
+		patch["customAttributes."+k] = v
+	}
+
+	item, err := h.repo.Update(r.Context(), id, patch)
+	if errors.Is(err, repository.ErrNotFound) {
+		response.Err(w, http.StatusNotFound, "NOT_FOUND", "Item not found", nil)
+		return
+	}
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update item", nil)
+		return
+	}
+	h.registerJenis(r.Context(), item.Jenis)
+	item.EnsureMaps()
+	item.NamaProyek = h.resolveNamaProyek(r.Context(), item.IdProyek)
 	response.OK(w, http.StatusOK, item, nil)
 }
 
 // DeleteItem: DELETE /api/v1/items/{id}
-func DeleteItem(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+func (h *ItemHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	err := h.repo.Delete(r.Context(), id)
+	if errors.Is(err, repository.ErrNotFound) {
+		response.Err(w, http.StatusNotFound, "NOT_FOUND", "Item not found", nil)
+		return
+	}
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete item", nil)
+		return
+	}
 	response.OK(w, http.StatusOK, map[string]string{"_id": id}, nil)
 }
 
 // FilterOptions: GET /api/v1/items/filter-options
-func FilterOptions(w http.ResponseWriter, r *http.Request) {
-	data := map[string]interface{}{
-		"proyek":       []string{"ALPHA", "BETA", "GAMMA"},
-		"jenisProduct": []string{"Laptop", "PC", "Monitor"},
-		"lokasi":       []string{"Jakarta HQ", "Surabaya Branch"},
-		"status":       []string{"Active", "Idle", "Maintenance"},
+//
+// Each key comes from the source that owns it: jenis from the item-type
+// master list (so creating/deleting a type actually moves the dropdown),
+// status still derived from the items themselves (no master list for it in
+// this phase), and project from the projects collection.
+func (h *ItemHandler) FilterOptions(w http.ResponseWriter, r *http.Request) {
+	jenis, err := h.itemTypeRepo.ListNames(r.Context())
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load filter options", nil)
+		return
 	}
-	response.OK(w, http.StatusOK, data, nil)
+
+	statuses, err := h.repo.Distinct(r.Context(), "status")
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load filter options", nil)
+		return
+	}
+
+	// The full project list is included here too, so a client populating the
+	// idProyek/namaProyek dropdown never needs a separate GET /projects
+	// round trip just for that — same data, same order (by namaProyek).
+	projects, err := h.projectRepo.List(r.Context())
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load filter options", nil)
+		return
+	}
+
+	result := map[string]interface{}{
+		"jenis":   jenis,
+		"status":  statuses,
+		"project": projects,
+	}
+	response.OK(w, http.StatusOK, result, nil)
 }
 
-// Stats: GET /api/v1/items/stats
-func Stats(w http.ResponseWriter, r *http.Request) {
-	recent := make([]mocks.ItemPublic, 0, len(mocks.Items))
-	for _, it := range mocks.Items {
-		recent = append(recent, it.Public())
+// FilterOptionsJenis: GET /api/v1/items/filter-options/jenis
+//
+// The jenis slice of FilterOptions, kept as its own endpoint for clients
+// that only need that one dropdown. Same source (the item-type master list),
+// so the two can never disagree.
+func (h *ItemHandler) FilterOptionsJenis(w http.ResponseWriter, r *http.Request) {
+	values, err := h.itemTypeRepo.ListNames(r.Context())
+	if err != nil {
+		response.Err(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to load filter options", nil)
+		return
 	}
-	data := map[string]interface{}{
-		"totalItems": 143,
-		"byStatus": []map[string]interface{}{
-			{"_id": "Active", "count": 120},
-			{"_id": "Maintenance", "count": 15},
-		},
-		"byJenisProduct": []map[string]interface{}{
-			{"_id": "Laptop", "count": 80},
-			{"_id": "PC", "count": 40},
-		},
-		"byProyek": []map[string]interface{}{
-			{"_id": "ALPHA", "count": 30},
-		},
-		"recentlyAdded": recent,
-	}
-	response.OK(w, http.StatusOK, data, nil)
+	response.OK(w, http.StatusOK, values, nil)
 }
+
+// GET /api/v1/items/stats is gone (it was an F05 stub) — the real numbers now
+// live in AnalyticsHandler under /api/v1/analytics/*, whose response is a
+// superset of what the stub returned.
 
 // ImportItems: POST /api/v1/items/import
-func ImportItems(w http.ResponseWriter, r *http.Request) {
+func (h *ItemHandler) ImportItems(w http.ResponseWriter, r *http.Request) {
 	data := map[string]int{"inserted": 0, "updated": 0, "failed": 0}
 	response.OKWithErrors(w, http.StatusOK, data, []map[string]interface{}{})
 }
 
 // ExportItems: GET /api/v1/items/export
-func ExportItems(w http.ResponseWriter, r *http.Request) {
+func (h *ItemHandler) ExportItems(w http.ResponseWriter, r *http.Request) {
 	response.Err(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "Export is not implemented in this phase", nil)
 }

@@ -1,21 +1,21 @@
 # Inventory Management System
 
-A full-stack inventory management application built with **React (Vite)** on the frontend and **Go (Golang)** on the backend. Fully containerized using **Docker**. Deployed to **Vercel**.
+...
 
 ---
 
-## Project Structure
+## 1. Project Structure
 
 This repository is managed as a monorepo structured as follows:
 
-- `/frontend` - React application powered by Vite.
-- `/backend` - REST API built with Go.
+- `/frontend` - React using Vite.
+- `/backend` - Go.
 
 ---
 
-## Setup & Installation
+## 2. Setup & Installation
 
-### 1. Prerequisites
+### a. Prerequisites
 
 Ensure you have the following installed on your local machine:
 
@@ -23,60 +23,59 @@ Ensure you have the following installed on your local machine:
 - [Go](https://go.dev/) (v1.24 or higher)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) & Docker Compose
 
-### 2. Clone the Repository
+### b. Clone the Repository
 
 ```bash
 git clone [https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git](https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git)
 cd YOUR_REPO_NAME
 ```
 
-### 3. Environtment Variables
+### c. Environment Variables
 
 ```bash
-# For Backend
 cp backend/.env.example backend/.env
-
-# For Frontend
-cp frontend/.env.example frontend/.env
 ```
 
-## How to Run
+## 3. How to Run
 
-### Local Testing (Native)
+### 3.1. Local Testing (Native)
 
-Run this option if you want fast development cycles and hot-reloading without container overhead.
+open 3 terminal windows/tabs, one for the mongo, one for backend and one for the frontend.
 
-#### 1. Run Backend (Go)
+#### a. Start MongoDB
+
+In terminal 1, start a local MongoDB instance.
 
 ```bash
-cd backend
-go run main.go
+docker-compose up mongo
+# or: podman run -d --name inventory-mongo -p 27017:27017 mongo:7
+# or: your own local mongod
 ```
 
-- The backend API will be live at: http://localhost:8080
-- Test endpoint: http://localhost:8080/api/hello
+#### b. Run the backend (Go)
 
-#### 1b. Run Backend Phase 1 API Stub (Go)
-
-This is a separate, mock-only entrypoint that stubs the full `/api/v1/items` contract (see `API_CONTRACT.md`) with static data — no MongoDB required.
+In Terminal 2, navigate to the backend directory and run the server.
 
 ```bash
 cd backend
 go run ./cmd/server
 ```
 
-- The stub API will be live at: http://localhost:8080 (override with `PORT=<port> go run ./cmd/server`)
-- Test endpoint: http://localhost:8080/api/v1/items
+- The API will be live at: http://localhost:8080
 
-Every route in `API_CONTRACT.md` can be hit with curl, e.g.:
+If you want to override the default port, set the `PORT` environment variable in `backend/.env` before running.
+
+#### c. Populate the database with sample data
 
 ```bash
-curl http://localhost:8080/api/v1/items
-curl http://localhost:8080/api/v1/items/507f191e810c19729de860ea
-curl -X POST http://localhost:8080/api/v1/items -H "Content-Type: application/json" -d '{"name":"RTI-ALPHA-005"}'
+cd backend
+go run ./cmd/seed          # insert sample projects + items + item types (additive)
+go run ./cmd/seed --reset  # wipe items/projects/itemTypes first, then insert
 ```
 
-#### 2. Run Frontend (React + Vite)
+#### d. Run Frontend
+
+In Terminal 3, navigate to the frontend directory and start the development server.
 
 ```bash
 cd frontend
@@ -86,9 +85,9 @@ npm run dev
 
 - The frontend development server will be live at: http://localhost:5173
 
-### Docker Compose (Production Replicas)
+### 3.2. Docker
 
-#### 1. Build and Run Containers
+#### a. Build and Run Containers
 
 ```bash
 docker-compose up --build
@@ -98,7 +97,7 @@ docker-compose up --build
 
 - Backend API (Go): http://localhost:8080
 
-#### 2. Stop and Remove Containers
+#### b. Stop and Remove Containers
 
 ```bash
 docker-compose down
